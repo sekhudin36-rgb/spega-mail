@@ -57,6 +57,13 @@ export interface Letter {
   isDraft?: boolean;
   templateType?: string;
   templatePayload?: string;
+  // Fields for Teacher/Parent (Guru / Wali) submissions
+  applicantName?: string;
+  applicantPhone?: string;
+  applicantRole?: 'guru' | 'wali' | 'siswa' | 'umum';
+  source?: 'admin' | 'portal_guru_wali';
+  submissionStatus?: 'pending_approval' | 'approved' | 'rejected';
+  adminNotes?: string;
 }
 
 export interface Archive {
@@ -78,11 +85,24 @@ export interface Archive {
   createdAt: string;
 }
 
+export interface SystemLog {
+  id?: number;
+  timestamp: string; // ISO string
+  action: string;
+  category: 'Persuratan' | 'Arsip' | 'Kepegawaian' | 'Kesiswaan' | 'Keamanan' | 'Sistem' | 'Laporan';
+  level: 'info' | 'success' | 'warning' | 'error';
+  user: string;
+  details: string;
+  ipAddress?: string;
+  metadata?: string; // JSON string or text summary
+}
+
 const db = new Dexie('SekolahPersuratanDB') as Dexie & {
   teachers: EntityTable<Teacher, 'id'>;
   students: EntityTable<Student, 'id'>;
   letters: EntityTable<Letter, 'id'>;
   archives: EntityTable<Archive, 'id'>;
+  systemLogs: EntityTable<SystemLog, 'id'>;
 };
 
 db.version(1).stores({
@@ -121,6 +141,14 @@ db.version(6).stores({
   students: '++id, name, nisn, grade, createdAt',
   letters: '++id, type, referenceNumber, title, senderOrRecipient, date, status, createdAt, indexData, sequenceNumber, code',
   archives: '++id, title, classificationCode, category, referenceNumber, date, status, storageLocation, createdAt'
+});
+
+db.version(7).stores({
+  teachers: '++id, name, nip, subject, createdAt',
+  students: '++id, name, nisn, grade, createdAt',
+  letters: '++id, type, referenceNumber, title, senderOrRecipient, date, status, createdAt, indexData, sequenceNumber, code',
+  archives: '++id, title, classificationCode, category, referenceNumber, date, status, storageLocation, createdAt',
+  systemLogs: '++id, timestamp, action, category, level, user'
 });
 
 db.on('populate', async () => {
@@ -214,6 +242,7 @@ db.on('populate', async () => {
 
   await db.letters.bulkAdd(INITIAL_LETTERS_DATA);
   await db.archives.bulkAdd(INITIAL_ARCHIVES_DATA);
+  await db.systemLogs.bulkAdd(INITIAL_SYSTEM_LOGS_DATA);
 });
 
 export const COMMON_LETTER_CODES = [
@@ -647,20 +676,163 @@ export const INITIAL_ARCHIVES_DATA: Omit<Archive, 'id'>[] = [
   }
 ];
 
+export const INITIAL_SYSTEM_LOGS_DATA: Omit<SystemLog, 'id'>[] = [
+  {
+    timestamp: '2026-08-31T08:00:15.000Z',
+    action: 'INIT_SYSTEM',
+    category: 'Sistem',
+    level: 'info',
+    user: 'Sistem Otomatis',
+    details: 'Inisialisasi engine basis data lokal Dexie IndexedDB (SekolahPersuratanDB v3.0) berhasil dijalankan.',
+    ipAddress: '127.0.0.1 (Localhost)',
+    metadata: JSON.stringify({ version: '3.0.0', db: 'Dexie IndexedDB', status: 'Ready' })
+  },
+  {
+    timestamp: '2026-08-31T08:02:40.000Z',
+    action: 'LOGIN_ADMIN',
+    category: 'Keamanan',
+    level: 'success',
+    user: 'Admin TU (Khabibu Rohman, S.Kom.)',
+    details: 'Autentikasi admin Tata Usaha berhasil. Sesi kerja lokal dimulai.',
+    ipAddress: '192.168.1.45 (Workstation TU)',
+    metadata: JSON.stringify({ role: 'admin', client: 'Desktop Chrome / PWA' })
+  },
+  {
+    timestamp: '2026-08-31T08:15:22.000Z',
+    action: 'REGISTER_SURAT_MASUK',
+    category: 'Persuratan',
+    level: 'success',
+    user: 'Admin TU',
+    details: 'Mencatat Surat Masuk dari Dinas Pendidikan Kab. Kediri: "Undangan Koordinasi ANBK SMP TA 2026/2027" (No: 421.3/1208/418.20/2026).',
+    ipAddress: '192.168.1.45 (Workstation TU)',
+    metadata: JSON.stringify({ refNum: '421.3/1208/418.20/2026', type: 'inbox', code: '421.3' })
+  },
+  {
+    timestamp: '2026-08-31T08:45:10.000Z',
+    action: 'DISPOSISI_SURAT',
+    category: 'Persuratan',
+    level: 'info',
+    user: 'Drs. H. Ahmad Santoso, M.Pd.',
+    details: 'Menambahkan instruksi disposisi Kepala Sekolah kepada Waka Kurikulum & Tim Proktor TIK.',
+    ipAddress: '192.168.1.12 (Kepala Sekolah Device)',
+    metadata: JSON.stringify({ letterId: 1, addressedTo: 'Waka Kurikulum & Tim Proktor TIK' })
+  },
+  {
+    timestamp: '2026-08-31T09:10:05.000Z',
+    action: 'BUAT_DRAF_SURAT_TUGAS',
+    category: 'Persuratan',
+    level: 'success',
+    user: 'Admin TU',
+    details: 'Menghasilkan draf Surat Perintah Tugas untuk Budi Utomo, S.Pd. (Pendampingan Olimpiade Sains Nasional).',
+    ipAddress: '192.168.1.45 (Workstation TU)',
+    metadata: JSON.stringify({ template: 'guru_tugas', recipient: 'Budi Utomo, S.Pd.' })
+  },
+  {
+    timestamp: '2026-08-31T09:30:18.000Z',
+    action: 'CETAK_DOKUMEN_RESMI',
+    category: 'Laporan',
+    level: 'info',
+    user: 'Admin TU',
+    details: 'Mencetak Naskah Dinas Surat Perintah Tugas lengkap dengan QR Code Verifikasi Keaslian.',
+    ipAddress: '192.168.1.45 (Workstation TU)',
+    metadata: JSON.stringify({ format: 'PDF / Cetak Langsung', qrVerification: true })
+  },
+  {
+    timestamp: '2026-08-31T10:05:00.000Z',
+    action: 'ARSIP_DIGITAL',
+    category: 'Arsip',
+    level: 'success',
+    user: 'Admin TU',
+    details: 'Menyimpan berkas arsip SK Pembagian Tugas GTK TP 2026/2027 ke Lemari Arsip TU (Rak 01 / Box SK-2026).',
+    ipAddress: '192.168.1.45 (Workstation TU)',
+    metadata: JSON.stringify({ archiveCode: '800/SK-01/SMPN3/2026', status: 'Aktif' })
+  },
+  {
+    timestamp: '2026-08-31T10:40:12.000Z',
+    action: 'PORTAL_PERMOHONAN',
+    category: 'Persuratan',
+    level: 'info',
+    user: 'Wali Murid (Zahra Putri)',
+    details: 'Permohonan Surat Keterangan Siswa Aktif diajukan melalui Portal Guru & Wali Mandiri.',
+    ipAddress: '180.252.88.14 (Mobile Client)',
+    metadata: JSON.stringify({ applicant: 'Zahra Putri Ramadhani', purpose: 'Pencairan PIP' })
+  },
+  {
+    timestamp: '2026-08-31T11:00:30.000Z',
+    action: 'VERIFIKASI_PERMOHONAN',
+    category: 'Persuratan',
+    level: 'success',
+    user: 'Admin TU',
+    details: 'Menyetujui dan menerbitkan Surat Keterangan Siswa Aktif No: 422.1/088/SMPN3/VIII/2026.',
+    ipAddress: '192.168.1.45 (Workstation TU)',
+    metadata: JSON.stringify({ status: 'approved', refNum: '422.1/088/SMPN3/VIII/2026' })
+  },
+  {
+    timestamp: '2026-08-31T11:45:50.000Z',
+    action: 'CADANGAN_BASISDATA',
+    category: 'Sistem',
+    level: 'success',
+    user: 'Admin TU',
+    details: 'Ekspor cadangan basis data lokal (Backup JSON) berhasil diunduh.',
+    ipAddress: '192.168.1.45 (Workstation TU)',
+    metadata: JSON.stringify({ recordsCount: 42, integrityCheck: 'Passed' })
+  }
+];
+
+/**
+ * Add a new activity log entry to Dexie systemLogs
+ */
+export async function addSystemLog(log: {
+  action: string;
+  category: 'Persuratan' | 'Arsip' | 'Kepegawaian' | 'Kesiswaan' | 'Keamanan' | 'Sistem' | 'Laporan';
+  level?: 'info' | 'success' | 'warning' | 'error';
+  user?: string;
+  details: string;
+  ipAddress?: string;
+  metadata?: Record<string, any> | string;
+  timestamp?: string;
+}): Promise<number | undefined> {
+  try {
+    const defaultUser = localStorage.getItem('adminName') || 'Admin TU';
+    const metadataStr = typeof log.metadata === 'object' ? JSON.stringify(log.metadata) : log.metadata;
+
+    const id = await db.systemLogs.add({
+      timestamp: log.timestamp || new Date().toISOString(),
+      action: log.action,
+      category: log.category,
+      level: log.level || 'info',
+      user: log.user || defaultUser,
+      details: log.details,
+      ipAddress: log.ipAddress || '192.168.1.45 (Klien Lokal)',
+      metadata: metadataStr
+    });
+    return id;
+  } catch (e) {
+    console.warn('Gagal mencatat log sistem:', e);
+    return undefined;
+  }
+}
+
 /**
  * Seeds or enriches the database with the complete authentic school datasets.
  * If overwrite is false, only adds records whose reference numbers don't exist yet.
  */
-export async function seedCompleteSchoolData(overwrite = false): Promise<{ lettersCount: number; archivesCount: number }> {
+export async function seedCompleteSchoolData(overwrite = false): Promise<{ lettersCount: number; archivesCount: number; logsCount: number }> {
   let lettersToAdd = INITIAL_LETTERS_DATA;
   let archivesToAdd = INITIAL_ARCHIVES_DATA;
 
   if (overwrite) {
     await db.letters.clear();
     await db.archives.clear();
+    await db.systemLogs.clear();
     await db.letters.bulkAdd(INITIAL_LETTERS_DATA);
     await db.archives.bulkAdd(INITIAL_ARCHIVES_DATA);
-    return { lettersCount: INITIAL_LETTERS_DATA.length, archivesCount: INITIAL_ARCHIVES_DATA.length };
+    await db.systemLogs.bulkAdd(INITIAL_SYSTEM_LOGS_DATA);
+    return { 
+      lettersCount: INITIAL_LETTERS_DATA.length, 
+      archivesCount: INITIAL_ARCHIVES_DATA.length,
+      logsCount: INITIAL_SYSTEM_LOGS_DATA.length 
+    };
   }
 
   const existingLetters = await db.letters.toArray();
@@ -679,7 +851,16 @@ export async function seedCompleteSchoolData(overwrite = false): Promise<{ lette
     await db.archives.bulkAdd(archivesToAdd);
   }
 
-  return { lettersCount: lettersToAdd.length, archivesCount: archivesToAdd.length };
+  const existingLogs = await db.systemLogs.count();
+  if (existingLogs === 0) {
+    await db.systemLogs.bulkAdd(INITIAL_SYSTEM_LOGS_DATA);
+  }
+
+  return { 
+    lettersCount: lettersToAdd.length, 
+    archivesCount: archivesToAdd.length,
+    logsCount: await db.systemLogs.count() 
+  };
 }
 
 export { db };

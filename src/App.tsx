@@ -1,5 +1,5 @@
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Letters from './pages/Letters';
@@ -8,12 +8,26 @@ import Teachers from './pages/Teachers';
 import Students from './pages/Students';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
+import SystemLogs from './pages/SystemLogs';
 import Login from './pages/Login';
+import PortalGuruWali from './pages/PortalGuruWali';
 import ConfirmProvider from './components/ConfirmProvider';
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
+// Admin only route guard
+function AdminProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = sessionStorage.getItem('isAuthenticated') === 'true';
-  return isAuthenticated ? children : <Navigate to="/login" replace />;
+  const userRole = sessionStorage.getItem('userRole');
+
+  if (isAuthenticated && userRole !== 'guru_wali') {
+    return <>{children}</>;
+  }
+
+  const isGuest = sessionStorage.getItem('isGuestAuthenticated') === 'true' || userRole === 'guru_wali';
+  if (isGuest) {
+    return <Navigate to="/portal-guru-wali" replace />;
+  }
+
+  return <Navigate to="/login" replace />;
 }
 
 export default function App() {
@@ -58,15 +72,19 @@ export default function App() {
       <HashRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+          <Route path="/portal-guru-wali" element={<PortalGuruWali />} />
+          <Route path="/ajukan-surat" element={<PortalGuruWali />} />
+          <Route path="/" element={<AdminProtectedRoute><Layout /></AdminProtectedRoute>}>
             <Route index element={<Dashboard />} />
             <Route path="letters" element={<Letters />} />
             <Route path="archives" element={<Archives />} />
             <Route path="teachers" element={<Teachers />} />
             <Route path="students" element={<Students />} />
             <Route path="reports" element={<Reports />} />
+            <Route path="logs" element={<SystemLogs />} />
             <Route path="settings" element={<Settings />} />
           </Route>
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </HashRouter>
     </ConfirmProvider>

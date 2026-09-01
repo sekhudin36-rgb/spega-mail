@@ -71,6 +71,7 @@ export default function LetterTemplateWizard({ isOpen, onClose, onDraftCreated, 
   const [activePurpose, setActivePurpose] = useState('Persyaratan Administrasi Orang Tua');
   
   // 2. Surat Tugas Guru
+  const [taskDasar, setTaskDasar] = useState('Perintah Kepala Sekolah');
   const [taskName, setTaskName] = useState('Mengikuti Workshop Peningkatan Kompetensi Guru');
   const [taskLocation, setTaskLocation] = useState('Aula Dinas Pendidikan Kabupaten Kediri');
   const [taskDate, setTaskDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -243,8 +244,16 @@ export default function LetterTemplateWizard({ isOpen, onClose, onDraftCreated, 
     const schoolName = config.schoolName;
     const schoolKop = config.schoolKop;
     const schoolAddress = config.address;
-    const headmaster = localStorage.getItem('headmaster') || 'Dr. Budi Santoso, M.Pd';
-    const headmasterNip = localStorage.getItem('headmasterNip') || '19800101 200501 1 001';
+    
+    // Dynamic Headmaster from Dewan Guru database
+    const teachersList = await db.teachers.toArray();
+    const headmasterTeacher = teachersList.find(t => 
+      (t.position && t.position.toLowerCase().includes('kepala sekolah')) ||
+      (t.position && t.position.toLowerCase().includes('plt')) ||
+      (t.name && (t.name.toLowerCase().includes('budi santoso') || t.name.toLowerCase().includes('kepala')))
+    );
+    const headmaster = headmasterTeacher?.name || config.headmaster || localStorage.getItem('headmaster') || 'Dr. Budi Santoso, M.Pd';
+    const headmasterNip = headmasterTeacher?.nip || config.headmasterNip || localStorage.getItem('headmasterNip') || '19800101 200501 1 001';
     const adminName = localStorage.getItem('adminName') || 'Rahmawati, S.Kom';
 
     // 2. Generate PDF
@@ -314,61 +323,110 @@ export default function LetterTemplateWizard({ isOpen, onClose, onDraftCreated, 
         signatureY = 160;
 
       } else if (template === 'surat-tugas' && selectedTeacher) {
-        letterTitle = `Surat Tugas Guru - ${selectedTeacher.name}`;
+        letterTitle = `Surat Perintah Tugas - ${selectedTeacher.name}`;
         recipientOrRecipientText = selectedTeacher.name;
-        letterDescription = `Surat tugas dinas guru atas nama ${selectedTeacher.name} untuk melaksanakan tugas: ${taskName} di ${taskLocation}.`;
         letterCategory = 'Kepegawaian';
 
-        doc.setFont('helvetica', 'bold');
+        const tDate = format(new Date(taskDate), 'dd MMMM yyyy', { locale: id });
+        const tDay = format(new Date(taskDate), 'EEEE', { locale: id });
+        const finalDasar = taskDasar?.trim() || 'Perintah Kepala Sekolah';
+
+        letterDescription = `Dasar : ${finalDasar}
+
+MEMERINTAHKAN :
+
+Kepada Saudara. :
+• Nama : ${selectedTeacher.name}
+• NIP : ${selectedTeacher.nip || '-'}
+• Pangkat/Gol.Ruang : ${selectedTeacher.rankCategory || selectedTeacher.rank || 'Penata Muda / III/a'}
+• Jabatan : ${selectedTeacher.position || selectedTeacher.subject || 'Guru Mata Pelajaran'}
+
+Untuk :
+${taskName || 'Melaksanakan tugas kedinasan / pendampingan kegiatan'}
+
+Hari : ${tDay}
+Tanggal : ${tDate}
+Pukul : 08.00 WIB s.d Selesai
+Tempat : ${taskLocation || 'SMP Negeri 3 Kras / Lokasi Kegiatan'}
+
+Demikian surat tugas ini dibuat untuk dilaksanakan dengan penuh tanggung jawab.`;
+
+        doc.setFont('times', 'bold');
         doc.setFontSize(12);
-        doc.text('SURAT TUGAS', 105, 45, { align: 'center' });
-        doc.line(80, 46.5, 130, 46.5);
-        doc.setFont('helvetica', 'normal');
+        doc.text('SURAT PERINTAH TUGAS', 105, 45, { align: 'center' });
+        const titleWidth = doc.getTextWidth('SURAT PERINTAH TUGAS');
+        doc.line(105 - (titleWidth / 2), 46.2, 105 + (titleWidth / 2), 46.2);
+        doc.setFont('times', 'normal');
         doc.setFontSize(10);
-        doc.text(`Nomor: ${customRefNum}`, 105, 51, { align: 'center' });
+        doc.text(`Nomor : ${customRefNum}`, 105, 51, { align: 'center' });
 
-        doc.text('Yang bertanda tangan di bawah ini Kepala Sekolah Menengah Pertama:', 15, 62);
-        
-        doc.setFont('helvetica', 'bold');
-        doc.text('Nama', 25, 69);
-        doc.text('Jabatan', 25, 75);
-        doc.setFont('helvetica', 'normal');
-        doc.text(`:  ${headmaster}`, 55, 69);
-        doc.text(`:  Kepala Sekolah ${schoolName}`, 55, 75);
+        // Dasar
+        doc.text('Dasar', 15, 60);
+        doc.text(':', 55, 60);
+        const splitDasar = doc.splitTextToSize(finalDasar, 135);
+        doc.text(splitDasar, 58, 60);
 
-        doc.text('Dengan ini MENUGASKAN kepada pegawai / pendidik di bawah ini:', 15, 84);
+        const afterDasarY = 60 + (splitDasar.length * 5) + 3;
 
-        doc.setFont('helvetica', 'bold');
-        doc.text('Nama Pendidik', 25, 91);
-        doc.text('NIP', 25, 97);
-        doc.text('Pangkat / Golongan', 25, 103);
-        doc.text('Mata Pelajaran', 25, 109);
-        doc.text('Jabatan Sekolah', 25, 115);
-        doc.setFont('helvetica', 'normal');
-        doc.text(`:  ${selectedTeacher.name}`, 55, 91);
-        doc.text(`:  ${selectedTeacher.nip || '-'}`, 55, 97);
-        doc.text(`:  ${selectedTeacher.rank || '-'} (${selectedTeacher.rankCategory || '-'})`, 55, 103);
-        doc.text(`:  ${selectedTeacher.subject || '-'}`, 55, 109);
-        doc.text(`:  ${selectedTeacher.position || 'Guru Utama'}`, 55, 115);
+        // Memerintahkan
+        doc.setFont('times', 'bold');
+        doc.setFontSize(11);
+        doc.text('MEMERINTAHKAN :', 105, afterDasarY, { align: 'center' });
 
-        doc.setFont('helvetica', 'bold');
-        doc.text('Untuk melaksanakan tugas sebagai berikut:', 15, 126);
-        doc.setFont('helvetica', 'normal');
+        // Kepada Saudara
+        const kpdY = afterDasarY + 7;
+        doc.setFont('times', 'normal');
+        doc.setFontSize(10);
+        doc.text('Kepada Saudara.', 15, kpdY);
+        doc.text(':', 55, kpdY);
 
-        doc.text('1.  Tugas / Kegiatan', 25, 133);
-        doc.text('2.  Hari / Tanggal', 25, 139);
-        doc.text('3.  Tempat Pelaksanaan', 25, 145);
-        doc.text('4.  Peran / Jabatan Tugas', 25, 151);
+        doc.text('Nama', 15, kpdY + 6);
+        doc.text(':', 55, kpdY + 6);
+        doc.setFont('times', 'bold');
+        doc.text(selectedTeacher.name, 58, kpdY + 6);
 
-        doc.text(doc.splitTextToSize(`:  ${taskName}`, 135), 60, 133);
-        const tDate = format(new Date(taskDate), 'EEEE, dd MMMM yyyy', { locale: id });
-        doc.text(`:  ${tDate}`, 60, 139);
-        doc.text(doc.splitTextToSize(`:  ${taskLocation}`, 135), 60, 145);
-        doc.text(`:  ${taskRole}`, 60, 151);
+        doc.setFont('times', 'normal');
+        doc.text('NIP', 15, kpdY + 12);
+        doc.text(':', 55, kpdY + 12);
+        doc.text(selectedTeacher.nip || '-', 58, kpdY + 12);
 
-        const endText = `Demikian surat tugas ini diberikan kepada yang bersangkutan untuk dapat dilaksanakan dengan penuh tanggung jawab, serta segera melaporkan hasilnya setelah pelaksanaan kegiatan selesai.`;
-        doc.text(doc.splitTextToSize(endText, 180), 15, 161);
-        signatureY = 180;
+        doc.text('Pangkat/Gol.Ruang', 15, kpdY + 18);
+        doc.text(':', 55, kpdY + 18);
+        doc.text(selectedTeacher.rankCategory || selectedTeacher.rank || 'Penata Muda / III/a', 58, kpdY + 18);
+
+        doc.text('Jabatan', 15, kpdY + 24);
+        doc.text(':', 55, kpdY + 24);
+        doc.text(selectedTeacher.position || selectedTeacher.subject || 'Guru Mata Pelajaran', 58, kpdY + 24);
+
+        // Untuk
+        const untukY = kpdY + 33;
+        doc.text('Untuk', 15, untukY);
+        doc.text(':', 55, untukY);
+
+        const taskLines = doc.splitTextToSize(taskName || 'Melaksanakan tugas kedinasan / pendampingan kegiatan sekolah', 135);
+        doc.text(taskLines, 58, untukY);
+
+        const detailsY = untukY + (taskLines.length * 5) + 3;
+        doc.text('Hari', 70, detailsY);
+        doc.text(':', 95, detailsY);
+        doc.text(tDay, 98, detailsY);
+
+        doc.text('Tanggal', 70, detailsY + 6);
+        doc.text(':', 95, detailsY + 6);
+        doc.text(tDate, 98, detailsY + 6);
+
+        doc.text('Pukul', 70, detailsY + 12);
+        doc.text(':', 95, detailsY + 12);
+        doc.text('08.00 WIB s.d Selesai', 98, detailsY + 12);
+
+        doc.text('Tempat', 70, detailsY + 18);
+        doc.text(':', 95, detailsY + 18);
+        const splitLoc = doc.splitTextToSize(taskLocation || 'SMP Negeri 3 Kras', 95);
+        doc.text(splitLoc, 98, detailsY + 18);
+
+        const penutupY = detailsY + 18 + (splitLoc.length * 5) + 4;
+        doc.text('Demikian surat tugas ini dibuat untuk dilaksanakan dengan penuh tanggung jawab.', 15, penutupY);
+        signatureY = penutupY + 14;
 
       } else if (template === 'undangan-wali') {
         letterTitle = `Surat Undangan Pertemuan Wali Murid - ${invitationTarget}`;
@@ -1211,10 +1269,12 @@ export default function LetterTemplateWizard({ isOpen, onClose, onDraftCreated, 
         doc.text(`NIP. ${headmasterNip}`, 140, signatureY + 28);
       }
 
-      // SAVE PDF
-      doc.save(`Surat_Resmi_${customRefNum.replace(/\//g, '_')}.pdf`);
+      // SAVE PDF FILE
+      const pdfFileName = `Surat_Resmi_${customRefNum.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
+      const pdfDataUri = doc.output('datauristring');
+      doc.save(pdfFileName);
 
-      // 3. Register draft in database
+      // 3. Register draft in database so it can be downloaded and viewed anytime from register surat
       const dataToSave: Letter = {
         type: 'outbox',
         category: letterCategory,
@@ -1233,12 +1293,25 @@ export default function LetterTemplateWizard({ isOpen, onClose, onDraftCreated, 
         processingUnit: 'Tata Usaha (TU)',
         receivedBy: adminName,
         status: 'active',
+        fileUrl: pdfDataUri,
+        fileName: pdfFileName,
+        fileType: 'application/pdf',
+        isDraft: true,
+        templateType: template,
+        templatePayload: JSON.stringify({
+          template,
+          letterTitle,
+          letterCategory,
+          recipientOrRecipientText,
+          selectedStudent,
+          selectedTeacher
+        }),
         createdAt: new Date().toISOString()
       };
 
       await db.letters.add(dataToSave);
       confetti({ particleCount: 70, spread: 80, origin: { y: 0.6 } });
-      toast.success(`Draft surat "${letterTitle}" berhasil dibuat & diunduh!`);
+      toast.success(`Draft surat "${letterTitle}" berhasil dibuat & tersimpan permanen di Register Surat!`);
       onDraftCreated();
       onClose();
     } catch (err) {
@@ -1588,6 +1661,43 @@ export default function LetterTemplateWizard({ isOpen, onClose, onDraftCreated, 
               {/* 2. SURAT TUGAS */}
               {template === 'surat-tugas' && (
                 <div className="space-y-3">
+                  <div className="space-y-1 bg-slate-900/50 p-2.5 rounded-lg border border-sky-500/20">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-sky-300">DASAR PENUGASAN</label>
+                      <span className="text-[10px] text-amber-400">Bisa diubah / ditambah manual</span>
+                    </div>
+                    <input 
+                      type="text" 
+                      value={taskDasar}
+                      onChange={(e) => setTaskDasar(e.target.value)}
+                      placeholder="Perintah Kepala Sekolah"
+                      className="glass-input w-full text-xs text-sky-100 font-medium"
+                    />
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setTaskDasar('Perintah Kepala Sekolah')}
+                        className="text-[10px] px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 transition-colors"
+                      >
+                        Default: Perintah Kepala Sekolah
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTaskDasar('Perintah Kepala Sekolah dan Surat Undangan Terlampir')}
+                        className="text-[10px] px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
+                      >
+                        + Undangan Terlampir
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTaskDasar('Program Kerja Sekolah dan Perintah Kepala Sekolah')}
+                        className="text-[10px] px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
+                      >
+                        + Program Kerja
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="space-y-1">
                     <label className="text-xs font-medium text-slate-400">NAMA KEGIATAN / TUGAS DINAS</label>
                     <input 

@@ -24,7 +24,8 @@ import {
   Calendar,
   LogOut,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  Activity
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -139,6 +140,7 @@ export default function Layout() {
     { to: '/teachers', icon: Users, label: 'Data Dewan Guru', badge: null },
     { to: '/students', icon: GraduationCap, label: 'Data Peserta Didik', badge: null },
     { to: '/reports', icon: PieChart, label: 'Rekapitulasi & Agenda', badge: null },
+    { to: '/logs', icon: Activity, label: 'Log Sistem', badge: 'AUDIT' },
     { to: '/settings', icon: Settings, label: 'Konfigurasi Sistem', badge: null },
   ];
 

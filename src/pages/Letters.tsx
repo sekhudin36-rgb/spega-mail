@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Letter, COMMON_LETTER_CODES, seedCompleteSchoolData } from '../lib/db';
-import { Search, Plus, Archive, X, FileText, ArrowDownRight, ArrowUpRight, Download, Upload, Printer, FileSpreadsheet, FileIcon, Bookmark, ClipboardCheck, Edit, Trash, Trash2, Eye, Filter, Sparkles, QrCode as QrCodeIcon, CheckCircle2, Cloud, Database, AlertCircle, ShieldCheck } from 'lucide-react';
+import { Search, Plus, Archive, X, FileText, ArrowDownRight, ArrowUpRight, Download, Upload, Printer, FileSpreadsheet, FileIcon, Bookmark, ClipboardCheck, Edit, Trash, Trash2, Eye, Filter, Sparkles, QrCode as QrCodeIcon, CheckCircle2, Cloud, Database, AlertCircle, ShieldCheck, MessageCircle, Users, Briefcase, Phone, Layers, Hash } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
@@ -20,7 +20,16 @@ import {
   generateDisposisiHTML, 
   generateKartuKendaliHTML, 
   generateAgendaReportHTML, 
-  exportAgendaReportPDF 
+  exportAgendaReportPDF,
+  generateOfficialLetterHTML,
+  generateOfficialLetterPDF,
+  downloadLetterDocument,
+  generateSuratPermohonanHTML,
+  generateSuratDinasResmiHTML,
+  generateCombinedDraftHTML,
+  generateSuratPermohonanPDF,
+  generateSuratDinasResmiPDF,
+  generateCombinedDraftPDF
 } from '../lib/printHelper';
 import { isAutoSyncEnabled, getGoogleAccessToken, uploadLetterToGoogleDrive } from '../lib/googleDrive';
 
@@ -33,7 +42,7 @@ export default function Letters() {
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
-  const [filterType, setFilterType] = useState<'all' | 'inbox' | 'outbox'>('all'); // essentially "Jenis Surat"
+  const [filterType, setFilterType] = useState<'all' | 'inbox' | 'outbox' | 'guru_wali'>('all'); // essentially "Jenis Surat"
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [selectedYear, setSelectedYear] = useState<string>('all');
@@ -61,6 +70,23 @@ export default function Letters() {
     htmlContent: '',
     orientation: 'portrait'
   });
+
+  const [numberAssignModal, setNumberAssignModal] = useState<{
+    isOpen: boolean;
+    letter: Letter | null;
+    newRefNumber: string;
+    newDocumentDate: string;
+    autoApprove: boolean;
+    autoPrint: boolean;
+  }>({
+    isOpen: false,
+    letter: null,
+    newRefNumber: '',
+    newDocumentDate: format(new Date(), 'yyyy-MM-dd'),
+    autoApprove: true,
+    autoPrint: true
+  });
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { confirm } = useConfirm();
 
@@ -88,6 +114,146 @@ export default function Letters() {
   }, [viewingLetter]);
 
   const rawLetters = useLiveQuery(() => db.letters.toArray()) || [];
+  const teachers = useLiveQuery(() => db.teachers.toArray()) || [];
+
+  const getNextSequenceNumber = (type: 'inbox' | 'outbox') => {
+    const currentYear = new Date().getFullYear().toString();
+    const filtered = rawLetters.filter(l => l.type === type && l.date && new Date(l.date).getFullYear().toString() === currentYear);
+    const numbers = filtered
+      .map(l => parseInt(l.sequenceNumber || '', 10))
+      .filter(n => !isNaN(n));
+    const max = numbers.length > 0 ? Math.max(...numbers) : 0;
+    return String(max + 1).padStart(3, '0');
+  };
+
+  const handleOpenNumberAssignModal = (letter: Letter, autoPrint: boolean = true) => {
+    const currentYear = new Date().getFullYear().toString();
+    const nextSeq = getNextSequenceNumber('outbox');
+    const isSuratTugas = letter.templateType === 'guru_tugas' || letter.templateType === 'surat-tugas' || letter.title.toLowerCase().includes('tugas');
+    const isSiswaAktif = letter.templateType === 'wali_aktif' || letter.templateType === 'aktif-belajar' || letter.title.toLowerCase().includes('aktif');
+
+    let initialRef = letter.referenceNumber || '';
+    if (!initialRef || initialRef.includes('DRAF') || initialRef.includes('....') || initialRef.includes('421/DRAF/')) {
+      if (isSuratTugas) {
+        initialRef = `420.3/${nextSeq}/418.20.2.62.03/${currentYear}`;
+      } else if (isSiswaAktif) {
+        initialRef = `421/${nextSeq}/SMP.03/${currentYear}`;
+      } else {
+        initialRef = `420.3/${nextSeq}/418.20.2.62.03/${currentYear}`;
+      }
+    }
+
+    setNumberAssignModal({
+      isOpen: true,
+      letter,
+      newRefNumber: initialRef,
+      newDocumentDate: letter.documentDate || letter.date || format(new Date(), 'yyyy-MM-dd'),
+      autoApprove: true,
+      autoPrint
+    });
+  };
+
+  const handleSaveAssignedNumber = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!numberAssignModal.letter || !numberAssignModal.letter.id) return;
+    const finalNumber = numberAssignModal.newRefNumber.trim();
+    if (!finalNumber) {
+      toast.error('Silakan isi nomor surat resmi');
+      return;
+    }
+
+    try {
+      const targetLetter = numberAssignModal.letter;
+      const updatedData: Partial<Letter> = {
+        referenceNumber: finalNumber,
+        documentDate: numberAssignModal.newDocumentDate,
+        date: numberAssignModal.newDocumentDate,
+        submissionStatus: numberAssignModal.autoApprove ? 'approved' : targetLetter.submissionStatus,
+        isDraft: false,
+        status: 'active'
+      };
+
+      await db.letters.update(targetLetter.id, updatedData);
+      
+      // Update viewing modal if open
+      const updatedLetter: Letter = { ...targetLetter, ...updatedData } as Letter;
+      setViewingLetter(prev => prev && prev.id === targetLetter.id ? updatedLetter : prev);
+
+      // Auto archive synchronization
+      const existingArchive = await db.archives.where('referenceNumber').equals(targetLetter.referenceNumber).first();
+      if (existingArchive && existingArchive.id) {
+        await db.archives.update(existingArchive.id, {
+          referenceNumber: finalNumber,
+          date: numberAssignModal.newDocumentDate,
+          status: 'Aktif'
+        });
+      } else {
+        await db.archives.add({
+          title: targetLetter.title,
+          classificationCode: targetLetter.code || '420.3',
+          category: targetLetter.category || 'Persuratan (SK/Tugas)',
+          referenceNumber: finalNumber,
+          date: numberAssignModal.newDocumentDate,
+          developmentLevel: 'Asli',
+          amount: targetLetter.attachment || '1 Berkas',
+          condition: 'Baik',
+          storageLocation: targetLetter.type === 'inbox' ? 'Lemari Surat Masuk' : 'Lemari Surat Keluar',
+          status: 'Aktif',
+          description: targetLetter.description || `Surat resmi ${targetLetter.title}`,
+          createdAt: new Date().toISOString()
+        });
+      }
+
+      setNumberAssignModal(prev => ({ ...prev, isOpen: false, letter: null }));
+      confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+      toast.success(`Nomor surat resmi "${finalNumber}" berhasil ditetapkan & disetujui!`);
+
+      if (numberAssignModal.autoPrint) {
+        await handlePreviewOfficialLetter(updatedLetter, 'resmi');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Gagal menetapkan nomor surat');
+    }
+  };
+  
+  const handleApproveSubmission = async (letter: Letter, autoPrint: boolean = false) => {
+    if (!letter.id) return;
+    
+    // If the letter has a temporary draft number or is a portal submission, open the number assignment modal for Admin
+    if (
+      letter.referenceNumber.includes('DRAF') || 
+      letter.referenceNumber.includes('....') || 
+      letter.source === 'portal_guru_wali' ||
+      letter.submissionStatus === 'pending_approval'
+    ) {
+      handleOpenNumberAssignModal(letter, autoPrint);
+      return;
+    }
+
+    try {
+      const updatedData: Partial<Letter> = {
+        submissionStatus: 'approved',
+        isDraft: false,
+        status: 'active'
+      };
+      
+      await db.letters.update(letter.id, updatedData);
+      const updatedLetter = { ...letter, ...updatedData };
+      setViewingLetter(prev => prev && prev.id === letter.id ? updatedLetter : prev);
+      
+      confetti({ particleCount: 50, spread: 70, origin: { y: 0.6 } });
+      toast.success('Draf pengajuan surat telah disetujui & resmi diterbitkan!');
+
+      if (autoPrint) {
+        // Automatically open official letter print preview for Admin
+        await handlePreviewOfficialLetter(updatedLetter, 'resmi');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Gagal memperbarui status verifikasi');
+    }
+  };
   
   const handleSeedData = async () => {
     try {
@@ -106,24 +272,20 @@ export default function Letters() {
 
   const availableYears = Array.from(new Set(rawLetters.map(a => new Date(a.date).getFullYear().toString()))).sort((a,b)=>b.localeCompare(a));
 
-  const getNextSequenceNumber = (type: 'inbox' | 'outbox') => {
-    const currentYear = new Date().getFullYear().toString();
-    const filtered = rawLetters.filter(l => l.type === type && l.date && new Date(l.date).getFullYear().toString() === currentYear);
-    const numbers = filtered
-      .map(l => parseInt(l.sequenceNumber || '', 10))
-      .filter(n => !isNaN(n));
-    const max = numbers.length > 0 ? Math.max(...numbers) : 0;
-    return String(max + 1).padStart(3, '0');
-  };
-
   const letters = rawLetters
     .filter(a => {
       const matchSearch = search ? (
         a.title.toLowerCase().includes(search.toLowerCase()) || 
         a.referenceNumber.toLowerCase().includes(search.toLowerCase()) ||
-        a.senderOrRecipient.toLowerCase().includes(search.toLowerCase())
+        a.senderOrRecipient.toLowerCase().includes(search.toLowerCase()) ||
+        (a.applicantName && a.applicantName.toLowerCase().includes(search.toLowerCase())) ||
+        (a.applicantPhone && a.applicantPhone.includes(search))
       ) : true;
-      const matchType = filterType === 'all' || a.type === filterType;
+      const matchType = filterType === 'all' 
+        ? true 
+        : filterType === 'guru_wali'
+          ? (a.source === 'portal_guru_wali' || Boolean(a.applicantName))
+          : a.type === filterType;
       const matchCategory = selectedCategory === 'all' || a.category === selectedCategory;
       const matchStatus = selectedStatus === 'all' || (a.status || 'active') === selectedStatus;
       const matchYear = selectedYear === 'all' || new Date(a.date).getFullYear().toString() === selectedYear;
@@ -259,6 +421,84 @@ export default function Letters() {
     setEditingLetter(letter);
     setFormLetterType(letter.type);
     setIsModalOpen(true);
+  };
+
+  const handleDownloadLetterDocument = async (letter: Letter) => {
+    try {
+      toast.loading('Menyiapkan file dokumen surat...', { id: 'dl-letter' });
+      await downloadLetterDocument(letter);
+      toast.success(`Dokumen "${letter.title}" berhasil diunduh!`, { id: 'dl-letter' });
+    } catch (err) {
+      console.error(err);
+      toast.error('Gagal mengunduh dokumen surat', { id: 'dl-letter' });
+    }
+  };
+
+  const handlePreviewOfficialLetter = async (letter: Letter, docType: 'resmi' | 'permohonan' | 'combined' = 'resmi') => {
+    try {
+      const config = getSchoolConfig();
+      const isDraftSubmission = letter.source === 'portal_guru_wali' || letter.isDraft;
+      
+      let htmlContent = '';
+      let title = '';
+      let subtitle = '';
+
+      if (isDraftSubmission) {
+        if (docType === 'permohonan') {
+          htmlContent = generateSuratPermohonanHTML(letter, config);
+          title = `Naskah Surat Permohonan - ${letter.referenceNumber}`;
+          subtitle = `Pengajuan oleh: ${letter.applicantName || letter.receivedBy || 'Guru / Wali'} (${letter.applicantPhone || '-'}) • ${letter.title}`;
+        } else if (docType === 'resmi') {
+          htmlContent = await generateSuratDinasResmiHTML(letter, config, teachers);
+          title = `Naskah Surat Resmi Sekolah - ${letter.referenceNumber}`;
+          subtitle = `Dokumen Resmi SMPN 3 Kras • Ditujukan ke: ${letter.senderOrRecipient} • Status: ${letter.submissionStatus === 'approved' ? 'Disetujui' : 'Draf Resmi'}`;
+        } else {
+          htmlContent = await generateCombinedDraftHTML(letter, config, teachers);
+          title = `Paket Draf Lengkap (Permohonan & Surat Resmi) - ${letter.referenceNumber}`;
+          subtitle = `Pengajuan oleh: ${letter.applicantName || letter.receivedBy || 'Guru / Wali'} (${letter.applicantPhone || '-'}) • ${letter.title}`;
+        }
+      } else {
+        htmlContent = await generateOfficialLetterHTML(letter, config, teachers);
+        title = `Naskah Surat Resmi - ${letter.referenceNumber}`;
+        subtitle = `${letter.title} (${letter.type === 'inbox' ? 'Surat Masuk' : 'Surat Keluar'})`;
+      }
+
+      setPrintModalState({
+        isOpen: true,
+        title,
+        subtitle,
+        htmlContent,
+        onDownloadPdf: async () => {
+          if (isDraftSubmission) {
+            if (docType === 'permohonan') {
+              generateSuratPermohonanPDF(letter, config);
+              toast.success('Surat Permohonan (PDF) berhasil diunduh');
+            } else if (docType === 'resmi') {
+              await generateSuratDinasResmiPDF(letter, config, true, teachers);
+              toast.success('Surat Dinas Resmi Sekolah (PDF) berhasil diunduh');
+            } else {
+              await generateCombinedDraftPDF(letter, config, teachers);
+              toast.success('Paket Draf Lengkap (PDF) berhasil diunduh');
+            }
+          } else {
+            handleDownloadLetterDocument(letter);
+          }
+        },
+        onDownloadWord: () => {
+          const blob = new Blob(['\ufeff', htmlContent], { type: 'application/msword' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `${isDraftSubmission ? (docType === 'permohonan' ? 'Surat_Permohonan' : 'Surat_Resmi') : 'Surat_Resmi'}_${(letter.referenceNumber || 'Dinas').replace(/[^a-zA-Z0-9]/g, '_')}.doc`;
+          link.click();
+          URL.revokeObjectURL(url);
+          toast.success('Naskah surat berhasil diekspor ke Word');
+        }
+      });
+    } catch (err) {
+      console.error(err);
+      toast.error('Gagal memuat pratinjau surat resmi');
+    }
   };
 
   const toggleArchive = async (letter: Letter) => {
@@ -1165,20 +1405,40 @@ export default function Letters() {
             Filter { (selectedCategory !== 'all' || selectedStatus !== 'all' || selectedYear !== 'all' || sortBy !== 'date-desc') && <span className="w-2 h-2 rounded-full bg-sky-400"></span> }
           </button>
           
-          <div className="flex bg-slate-800/50 p-1 rounded-lg border border-white/5 w-full sm:w-auto">
-            {(['all', 'inbox', 'outbox'] as const).map(type => (
-              <button
-                key={type}
-                onClick={() => setFilterType(type)}
-                className={`flex-1 sm:flex-none px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
-                  filterType === type 
-                    ? 'bg-sky-500/20 text-sky-300 shadow-sm' 
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                {type === 'all' ? 'Semua' : type === 'inbox' ? 'Masuk' : 'Keluar'}
-              </button>
-            ))}
+          <div className="flex bg-slate-800/50 p-1 rounded-lg border border-white/5 w-full sm:w-auto flex-wrap">
+            {(['all', 'inbox', 'outbox', 'guru_wali'] as const).map(type => {
+              const count = type === 'guru_wali' 
+                ? rawLetters.filter(l => l.source === 'portal_guru_wali' || Boolean(l.applicantName)).length 
+                : 0;
+              const pendingCount = type === 'guru_wali' 
+                ? rawLetters.filter(l => (l.source === 'portal_guru_wali' || Boolean(l.applicantName)) && l.submissionStatus === 'pending_approval').length
+                : 0;
+
+              return (
+                <button
+                  key={type}
+                  onClick={() => setFilterType(type)}
+                  className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all flex items-center justify-center gap-1.5 ${
+                    filterType === type 
+                      ? type === 'guru_wali'
+                        ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 shadow-sm'
+                        : 'bg-sky-500/20 text-sky-300 shadow-sm' 
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {type === 'all' ? 'Semua' : type === 'inbox' ? 'Masuk' : type === 'outbox' ? 'Keluar' : 'Draf Guru/Wali'}
+                  {type === 'guru_wali' && count > 0 && (
+                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                      pendingCount > 0 
+                        ? 'bg-rose-500 text-white animate-pulse' 
+                        : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    }`}>
+                      {count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -1303,7 +1563,22 @@ export default function Letters() {
                       />
                     </td>
                     <td className="print:text-black">
-                      <div className="font-mono text-sm text-sky-300 font-semibold print:text-black">{letter.referenceNumber}</div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenNumberAssignModal(letter, false)}
+                          className="font-mono text-sm text-sky-300 hover:text-sky-200 font-semibold print:text-black hover:underline text-left inline-flex items-center gap-1"
+                          title="Klik untuk Isi / Ubah Nomor Surat Resmi"
+                        >
+                          <Hash className="w-3 h-3 text-sky-400 opacity-60" />
+                          <span>{letter.referenceNumber}</span>
+                        </button>
+                        {letter.isDraft && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                            <Sparkles className="w-2.5 h-2.5 text-amber-400" /> Draf
+                          </span>
+                        )}
+                      </div>
                       {letter.code && (
                         <div className="text-[11px] font-mono text-slate-400">
                           Kode: <span className="text-amber-400">{letter.code}</span> {letter.sequenceNumber && `| Urut: ${letter.sequenceNumber}`}
@@ -1323,8 +1598,27 @@ export default function Letters() {
                         {letter.category || '-'}
                       </span>
                     </td>
-                    <td className="print:text-black text-slate-300 text-sm max-w-[180px] truncate" title={letter.senderOrRecipient}>
-                      {letter.senderOrRecipient}
+                    <td className="print:text-black text-slate-300 text-sm max-w-[200px]">
+                      {letter.applicantName ? (
+                        <div>
+                          <div className="text-white font-medium flex items-center gap-1.5 flex-wrap">
+                            <span>{letter.applicantName}</span>
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase font-bold font-mono">
+                              {letter.applicantRole === 'guru' ? 'Guru' : letter.applicantRole === 'wali' ? 'Wali' : 'Pemohon'}
+                            </span>
+                          </div>
+                          {letter.applicantPhone && (
+                            <div className="text-[11px] text-emerald-400 font-mono flex items-center gap-1 mt-0.5">
+                              <Phone className="w-2.5 h-2.5 shrink-0" />
+                              <span>{letter.applicantPhone}</span>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="truncate" title={letter.senderOrRecipient}>
+                          {letter.senderOrRecipient}
+                        </div>
+                      )}
                     </td>
                     <td className="text-slate-400 print:text-black whitespace-nowrap">
                       {format(new Date(letter.date), 'dd MMM yyyy', { locale: id })}
@@ -1338,6 +1632,11 @@ export default function Letters() {
                         }`}>
                           {letter.type === 'inbox' ? 'Masuk' : 'Keluar'}
                         </span>
+                        {letter.submissionStatus === 'pending_approval' && (
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            Menunggu Verifikasi TU
+                          </span>
+                        )}
                         {letter.urgency && letter.urgency !== 'Biasa' && (
                           <span className={`px-1.5 py-0.2 rounded text-[10px] font-medium border ${
                             letter.urgency === 'Sangat Segera'
@@ -1359,10 +1658,73 @@ export default function Letters() {
                       </span>
                     </td>
                     <td className="print:hidden">
-                      <div className="flex gap-1 justify-end">
+                      <div className="flex gap-1 justify-end items-center flex-wrap">
+                        {/* Quick Assign / Edit Official Letter Number */}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenNumberAssignModal(letter, false)}
+                          className="p-2 rounded-lg hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 transition-colors"
+                          title="Isi / Tetapkan Nomor Surat Resmi"
+                        >
+                          <Hash className="w-4 h-4" />
+                        </button>
+
+                        {/* Quick Approve button for pending guru/wali draft */}
+                        {(letter.applicantName || letter.source === 'portal_guru_wali') && letter.submissionStatus === 'pending_approval' && (
+                          <button
+                            type="button"
+                            onClick={() => handleApproveSubmission(letter, true)}
+                            className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold flex items-center gap-1 shadow-sm shadow-emerald-950/40 transition-all mr-1"
+                            title="Setujui Draf, Tetapkan Nomor & Langsung Buka Cetak Surat Resmi"
+                          >
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>Setujui & Cetak</span>
+                          </button>
+                        )}
+
+                        {letter.applicantPhone && (
+                          <a
+                            href={`https://wa.me/${letter.applicantPhone.replace(/[^0-9]/g, '').replace(/^0/, '62')}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="p-2 rounded-lg hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 transition-colors"
+                            title={`Chat WhatsApp dengan ${letter.applicantName || 'Pemohon'}`}
+                          >
+                            <MessageCircle className="w-4 h-4" />
+                          </a>
+                        )}
+
+                        {/* Cetak Surat Resmi Langsung oleh Admin */}
+                        <button 
+                          onClick={() => handlePreviewOfficialLetter(letter, 'resmi')}
+                          className="p-2 rounded-lg hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 transition-colors"
+                          title="Cetak Langsung Naskah Surat Dinas Resmi"
+                        >
+                          <Printer className="w-4 h-4" />
+                        </button>
+
+                        {/* Cetak Surat Permohonan Pemohon jika dari portal */}
+                        {(letter.applicantName || letter.source === 'portal_guru_wali') && (
+                          <button 
+                            onClick={() => handlePreviewOfficialLetter(letter, 'permohonan')}
+                            className="p-2 rounded-lg hover:bg-sky-500/20 text-sky-400 hover:text-sky-300 transition-colors"
+                            title="Cetak Surat Permohonan Pemohon"
+                          >
+                            <FileText className="w-4 h-4" />
+                          </button>
+                        )}
+
+                        <button 
+                          onClick={() => handleDownloadLetterDocument(letter)}
+                          className="p-2 rounded-lg hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+                          title="Unduh Dokumen Surat (PDF)"
+                        >
+                          <Download className="w-4 h-4" />
+                        </button>
+
                         <button 
                           onClick={() => setViewingLetter(letter)}
-                          className="p-2 rounded-lg hover:bg-emerald-500/20 text-emerald-400/70 hover:text-emerald-300 transition-colors"
+                          className="p-2 rounded-lg hover:bg-sky-500/20 text-sky-400/70 hover:text-sky-300 transition-colors"
                           title="Lihat Detail Data"
                         >
                           <Eye className="w-4 h-4" />
@@ -1388,7 +1750,7 @@ export default function Letters() {
                         <button 
                           onClick={() => handleOpenDriveModalSingle(letter)}
                           className="p-2 rounded-lg hover:bg-sky-500/20 text-sky-400 hover:text-sky-300 transition-colors"
-                          title="Simpan ke Google Drive (Struktur Folder Sesuai Jenis Surat)"
+                          title="Simpan ke Google Drive"
                         >
                           <Cloud className="w-4 h-4" />
                         </button>
@@ -1442,11 +1804,142 @@ export default function Letters() {
                 </button>
               </div>
               <div className="p-6 space-y-6 overflow-y-auto custom-scrollbar">
+                {/* Dedicated Applicant Section for Guru & Wali submissions */}
+                {(viewingLetter.applicantName || viewingLetter.source === 'portal_guru_wali') && (
+                  <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-950/40 via-slate-900/60 to-teal-950/40 border border-emerald-500/30">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-emerald-500/20">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                          {viewingLetter.applicantRole === 'guru' ? <Briefcase className="w-4 h-4" /> : <Users className="w-4 h-4" />}
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-emerald-300 flex items-center gap-2">
+                            <span>PENGAJUAN DRAF SURAT DARI {viewingLetter.applicantRole === 'guru' ? 'GURU / TENDIK' : 'WALI MURID'}</span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              viewingLetter.submissionStatus === 'approved' 
+                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' 
+                                : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                            }`}>
+                              {viewingLetter.submissionStatus === 'approved' ? '✓ Disetujui & Diterbitkan' : '⏳ Menunggu Verifikasi TU'}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-400">Diajukan melalui Portal Mandiri Guru & Wali Murid</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {viewingLetter.submissionStatus === 'pending_approval' ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleApproveSubmission(viewingLetter, true)}
+                              className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-900/30 flex items-center gap-1.5 transition-all"
+                              title="Setujui Draf dan langsung buka cetak Surat Resmi"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Setujui & Cetak Resmi</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handlePreviewOfficialLetter(viewingLetter, 'resmi')}
+                              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-sky-600/30 hover:bg-sky-600/50 text-sky-300 border border-sky-500/30 flex items-center gap-1.5 transition-all"
+                              title="Cetak Surat Resmi langsung sebagai Admin"
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                              <span>Cetak Resmi (Admin)</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handlePreviewOfficialLetter(viewingLetter, 'permohonan')}
+                              className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 flex items-center gap-1.5 transition-all"
+                              title="Cetak Surat Permohonan Pemohon"
+                            >
+                              <FileText className="w-3.5 h-3.5" />
+                              <span>Cetak Permohonan</span>
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handlePreviewOfficialLetter(viewingLetter, 'resmi')}
+                              className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-md flex items-center gap-1.5 transition-all"
+                              title="Cetak Naskah Surat Dinas Resmi Sekolah"
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                              <span>Cetak Surat Resmi</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handlePreviewOfficialLetter(viewingLetter, 'permohonan')}
+                              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-sky-600/25 hover:bg-sky-600/40 text-sky-300 border border-sky-500/30 flex items-center gap-1.5 transition-all"
+                              title="Cetak Naskah Surat Permohonan Pemohon"
+                            >
+                              <FileText className="w-3.5 h-3.5" />
+                              <span>Cetak Permohonan</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handlePreviewOfficialLetter(viewingLetter, 'combined')}
+                              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-600/25 hover:bg-purple-600/40 text-purple-300 border border-purple-500/30 flex items-center gap-1.5 transition-all"
+                              title="Cetak Paket Lengkap 2 Dokumen (Permohonan + Surat Resmi)"
+                            >
+                              <Layers className="w-3.5 h-3.5" />
+                              <span>Paket 2-in-1</span>
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 text-xs">
+                      <div>
+                        <span className="text-slate-400 block text-[10px] uppercase font-mono">Nama Pemohon:</span>
+                        <span className="font-semibold text-white">{viewingLetter.applicantName || '-'}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px] uppercase font-mono">Nomor HP / WhatsApp:</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-emerald-400 font-semibold">{viewingLetter.applicantPhone || '-'}</span>
+                          {viewingLetter.applicantPhone && (
+                            <a
+                              href={`https://wa.me/${viewingLetter.applicantPhone.replace(/[^0-9]/g, '').replace(/^0/, '62')}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-2 py-0.5 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-[10px] font-bold inline-flex items-center gap-1"
+                            >
+                              <MessageCircle className="w-3 h-3" />
+                              <span>Chat WA</span>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px] uppercase font-mono">Status Pengajuan:</span>
+                        <span className="text-slate-200 capitalize font-medium">
+                          {viewingLetter.submissionStatus === 'approved' ? 'Telah Disetujui (Resmi)' : 'Menunggu Persetujuan Admin'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid sm:grid-cols-2 gap-6">
                   <div className="space-y-4">
                     <div>
-                      <div className="text-xs font-medium text-slate-500 uppercase mb-1">Nomor Referensi</div>
-                      <div className="text-white font-mono">{viewingLetter.referenceNumber}</div>
+                      <div className="text-xs font-medium text-slate-500 uppercase mb-1 flex items-center justify-between">
+                        <span>Nomor Referensi Resmi</span>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenNumberAssignModal(viewingLetter, false)}
+                          className="text-[11px] text-amber-400 hover:text-amber-300 font-sans flex items-center gap-1 font-semibold hover:underline"
+                          title="Isi / Ubah Nomor Surat Resmi"
+                        >
+                          <Hash className="w-3.5 h-3.5" />
+                          <span>Isi / Ubah Nomor</span>
+                        </button>
+                      </div>
+                      <div className="text-white font-mono font-bold text-base">{viewingLetter.referenceNumber}</div>
                     </div>
                     <div>
                       <div className="text-xs font-medium text-slate-500 uppercase mb-1">Perihal</div>
@@ -1545,6 +2038,35 @@ export default function Letters() {
               </div>
               <div className="p-4 bg-slate-800/30 border-t border-slate-700/50 flex justify-between items-center shrink-0">
                 <div className="flex flex-wrap gap-2">
+                  <button 
+                    onClick={() => handlePreviewOfficialLetter(viewingLetter, 'resmi')}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600/25 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/40 flex items-center gap-1.5 transition-colors"
+                    title="Pratinjau & Cetak Surat Dinas Resmi Sekolah"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Cetak Surat Resmi</span>
+                  </button>
+
+                  {(viewingLetter.applicantName || viewingLetter.source === 'portal_guru_wali') && (
+                    <button 
+                      onClick={() => handlePreviewOfficialLetter(viewingLetter, 'permohonan')}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 flex items-center gap-1.5 transition-colors"
+                      title="Pratinjau & Cetak Surat Permohonan Pemohon"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-sky-400" />
+                      <span>Cetak Surat Permohonan</span>
+                    </button>
+                  )}
+
+                  <button 
+                    onClick={() => handleDownloadLetterDocument(viewingLetter)}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center gap-1.5 transition-colors"
+                    title="Unduh file dokumen surat PDF"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Unduh PDF</span>
+                  </button>
+
                   {viewingLetter.type === 'inbox' ? (
                     <button 
                       onClick={() => { handleCetakDisposisi(viewingLetter); }}
@@ -1908,6 +2430,166 @@ export default function Letters() {
             onDraftCreated={() => {}}
             getNextSequenceNumber={getNextSequenceNumber}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Modal Tetapkan / Isi Nomor Surat Resmi oleh Admin */}
+      <AnimatePresence>
+        {numberAssignModal.isOpen && numberAssignModal.letter && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="glass-panel w-full max-w-lg p-0 overflow-hidden relative border-amber-500/30 shadow-2xl"
+            >
+              <div className="p-5 border-b border-slate-700/50 flex justify-between items-center bg-gradient-to-r from-amber-500/10 via-slate-800/40 to-slate-800/20">
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Hash className="w-5 h-5 text-amber-400" />
+                  <span>Tetapkan Nomor Surat Resmi</span>
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setNumberAssignModal(prev => ({ ...prev, isOpen: false, letter: null }))}
+                  className="text-slate-400 hover:text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveAssignedNumber} className="p-6 space-y-4">
+                <div className="p-3.5 rounded-xl bg-slate-800/60 border border-slate-700/60 space-y-1.5">
+                  <div className="text-xs text-slate-400 font-mono">DRAF / PERIHAL SURAT:</div>
+                  <div className="text-sm font-semibold text-white">{numberAssignModal.letter.title}</div>
+                  {numberAssignModal.letter.applicantName && (
+                    <div className="text-xs text-emerald-400 flex items-center gap-1 mt-1">
+                      <span>Pemohon:</span>
+                      <span className="font-semibold">{numberAssignModal.letter.applicantName}</span>
+                      <span>({numberAssignModal.letter.applicantRole === 'guru' ? 'Guru' : 'Wali Murid'})</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                    <span>NOMOR SURAT RESMI (DIISI OLEH ADMIN / TU) *</span>
+                    <span className="text-[10px] text-amber-400 font-mono">Standar Kode Sekolah</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={numberAssignModal.newRefNumber}
+                    onChange={(e) => setNumberAssignModal(prev => ({ ...prev, newRefNumber: e.target.value }))}
+                    placeholder="Contoh: 420.3/024/418.20.2.62.03/2026"
+                    className="glass-input w-full font-mono text-sm text-sky-300 font-bold border-amber-500/40 focus:border-amber-400"
+                  />
+                </div>
+
+                {/* Preset Cepat Format Nomor Surat */}
+                <div className="space-y-1.5">
+                  <div className="text-[11px] font-medium text-slate-400">Pilih Preset Format Nomor Standar:</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const yr = new Date().getFullYear();
+                        const seq = getNextSequenceNumber('outbox');
+                        setNumberAssignModal(prev => ({
+                          ...prev,
+                          newRefNumber: `420.3/${seq}/418.20.2.62.03/${yr}`
+                        }));
+                      }}
+                      className="px-2.5 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-mono transition-colors"
+                      title="Format Surat Perintah Tugas (SPT)"
+                    >
+                      SPT: 420.3/[Urut]/418.20.2.62.03/{new Date().getFullYear()}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const yr = new Date().getFullYear();
+                        const seq = getNextSequenceNumber('outbox');
+                        setNumberAssignModal(prev => ({
+                          ...prev,
+                          newRefNumber: `421/${seq}/SMP.03/${yr}`
+                        }));
+                      }}
+                      className="px-2.5 py-1 rounded bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/30 text-xs font-mono transition-colors"
+                      title="Format Surat Keterangan Siswa"
+                    >
+                      Keterangan: 421/[Urut]/SMP.03/{new Date().getFullYear()}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const yr = new Date().getFullYear();
+                        const seq = getNextSequenceNumber('outbox');
+                        setNumberAssignModal(prev => ({
+                          ...prev,
+                          newRefNumber: `421/${seq}/418.20.2.62.03/${yr}`
+                        }));
+                      }}
+                      className="px-2.5 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-mono transition-colors"
+                      title="Format Surat Dinas Umum"
+                    >
+                      Dinas: 421/[Urut]/418.20.2.62.03/{new Date().getFullYear()}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-300">TANGGAL NASKAH SURAT</label>
+                    <input
+                      type="date"
+                      value={numberAssignModal.newDocumentDate}
+                      onChange={(e) => setNumberAssignModal(prev => ({ ...prev, newDocumentDate: e.target.value }))}
+                      className="glass-input w-full text-xs"
+                    />
+                  </div>
+
+                  <div className="flex flex-col justify-center space-y-1.5 pt-2">
+                    <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={numberAssignModal.autoApprove}
+                        onChange={(e) => setNumberAssignModal(prev => ({ ...prev, autoApprove: e.target.checked }))}
+                        className="rounded border-slate-600 bg-slate-800 text-emerald-500 focus:ring-emerald-500/50"
+                      />
+                      <span>Tandai Resmi Disetujui</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
+                      <input
+                        type="checkbox"
+                        checked={numberAssignModal.autoPrint}
+                        onChange={(e) => setNumberAssignModal(prev => ({ ...prev, autoPrint: e.target.checked }))}
+                        className="rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500/50"
+                      />
+                      <span>Buka Pratinjau Cetak</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="pt-4 flex justify-end gap-2.5 border-t border-slate-700/50">
+                  <button
+                    type="button"
+                    onClick={() => setNumberAssignModal(prev => ({ ...prev, isOpen: false, letter: null }))}
+                    className="px-4 py-2 rounded-lg text-xs font-medium text-slate-300 hover:bg-white/5 transition-colors"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-lg text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-950/40 flex items-center gap-1.5 transition-all"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Simpan & Terbitkan Nomor</span>
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
 

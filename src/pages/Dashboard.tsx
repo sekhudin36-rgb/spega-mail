@@ -71,6 +71,9 @@ export default function Dashboard() {
     const archivesCount = await db.archives.count();
     const teachersCount = await db.teachers.count();
     const studentsCount = await db.students.count();
+
+    const pendingSubmissions = letters.filter(l => (l.source === 'portal_guru_wali' || Boolean(l.applicantName)) && l.submissionStatus === 'pending_approval');
+    const pendingSubmissionsCount = pendingSubmissions.length;
     
     // Sort recent letters
     const recentLetters = [...letters].sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime()).slice(0, 6);
@@ -123,7 +126,7 @@ export default function Dashboard() {
 
     return { 
       lettersCount, inboxCount, outboxCount, archivedCount, activeCount, 
-      archivesCount, teachersCount, studentsCount, recentLetters, chartData, 
+      archivesCount, teachersCount, studentsCount, pendingSubmissionsCount, recentLetters, chartData, 
       topCategories, pieData 
     };
   });
@@ -264,6 +267,37 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* ALERT BANNER: PENDING GURU & WALI SUBMISSIONS */}
+      {stats.pendingSubmissionsCount > 0 && (
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="p-4 rounded-xl bg-gradient-to-r from-emerald-950/60 via-slate-900 to-teal-950/60 border border-emerald-500/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl"
+        >
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+              <Sparkles className="w-5 h-5 animate-pulse" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-2 flex-wrap">
+                <span>{stats.pendingSubmissionsCount} Pengajuan Draf Surat dari Guru / Wali Murid Menunggu Verifikasi TU</span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-slate-950 animate-pulse">
+                  Perlu Verifikasi
+                </span>
+              </h3>
+              <p className="text-xs text-slate-300">Draf surat telah dibuat oleh guru/wali secara mandiri dan siap diperiksa serta diberi nomor registrasi resmi.</p>
+            </div>
+          </div>
+          <button 
+            onClick={() => navigate('/letters')}
+            className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-950/50 transition-colors flex items-center gap-1.5 shrink-0 self-start sm:self-auto"
+          >
+            <span>Periksa di Data Surat</span>
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </motion.div>
+      )}
 
       {/* 2. STATISTIC METRIC CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

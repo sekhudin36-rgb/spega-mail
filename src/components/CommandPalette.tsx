@@ -15,7 +15,8 @@ import {
   CornerDownLeft,
   FileText,
   ShieldCheck,
-  Zap
+  Zap,
+  Activity
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../lib/db';
@@ -180,7 +181,7 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
                   </button>
                 </div>
 
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-2 mt-4 mb-2">Halaman Utama</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-2 mt-4 mb-2">Halaman Utama & Audit</p>
                 <div className="grid grid-cols-3 gap-1.5">
                   <button
                     onClick={() => handleNavigate('/')}
@@ -202,6 +203,20 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
                   >
                     <GraduationCap className="w-3.5 h-3.5 text-indigo-400" />
                     <span>Data Siswa</span>
+                  </button>
+                  <button
+                    onClick={() => handleNavigate('/logs')}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs bg-slate-800/30 hover:bg-slate-800 text-slate-300 transition-colors"
+                  >
+                    <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Log Sistem & Audit</span>
+                  </button>
+                  <button
+                    onClick={() => handleNavigate('/reports')}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs bg-slate-800/30 hover:bg-slate-800 text-slate-300 transition-colors"
+                  >
+                    <PieChart className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Rekapitulasi</span>
                   </button>
                   <button
                     onClick={() => handleNavigate('/settings')}

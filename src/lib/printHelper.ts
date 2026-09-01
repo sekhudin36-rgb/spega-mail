@@ -2,79 +2,75 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
-import type { Letter, Archive } from './db';
+import type { Letter, Archive, Teacher } from './db';
 import QRCode from 'qrcode';
 
 /**
  * Built-in high-fidelity SVG Preset Logos
- * Left Logo: Official Tut Wuri Handayani / Logo Sekolah Crest
- * Right Logo: Official Dinas Pendidikan / Lambang Instansi Daerah
+ * Left Logo: Lambang Resmi Pemerintah Kabupaten Kediri
+ * Right Logo: Lambang Tut Wuri Handayani / Dinas Pendidikan
  */
 export const DEFAULT_LEFT_LOGO = `data:image/svg+xml;utf8,${encodeURIComponent(`
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 115" width="100" height="115">
   <defs>
-    <linearGradient id="tutwuri_bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0284c7" />
-      <stop offset="100%" stop-color="#0369a1" />
+    <linearGradient id="shield_sky" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#0284c7" />
     </linearGradient>
-    <linearGradient id="gold_flame" x1="0%" y1="0%" x2="100%" y2="100%">
+    <linearGradient id="gold_grad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#fef08a" />
       <stop offset="50%" stop-color="#facc15" />
       <stop offset="100%" stop-color="#ca8a04" />
     </linearGradient>
+    <linearGradient id="mountain_grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#15803d" />
+      <stop offset="100%" stop-color="#14532d" />
+    </linearGradient>
+    <linearGradient id="red_grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ef4444" />
+      <stop offset="100%" stop-color="#b91c1c" />
+    </linearGradient>
   </defs>
-  <!-- Outer Pentagon Shield -->
-  <polygon points="50,4 94,36 77,88 23,88 6,36" fill="url(#tutwuri_bg)" stroke="#ca8a04" stroke-width="3" stroke-linejoin="round" />
-  <polygon points="50,9 89,38 74,83 26,83 11,38" fill="none" stroke="#ffffff" stroke-width="1.2" opacity="0.9" />
-  <!-- Wing & Flame (Tut Wuri Symbol) -->
-  <path d="M50,18 C53,26 62,32 68,30 C64,36 57,39 50,44 C43,39 36,36 32,30 C38,32 47,26 50,18 Z" fill="url(#gold_flame)" stroke="#a16207" stroke-width="0.8" />
-  <path d="M50,23 C52,29 59,34 64,33 C58,38 52,40 50,44 C48,40 42,38 36,33 C41,34 48,29 50,23 Z" fill="#ffffff" opacity="0.9" />
-  <!-- Open Book -->
-  <path d="M50,49 Q65,45 80,48 L80,68 Q65,65 50,70 Q35,65 20,68 L20,48 Q35,45 50,49 Z" fill="#ffffff" stroke="#0f172a" stroke-width="1.2" />
-  <line x1="50" y1="49" x2="50" y2="70" stroke="#0f172a" stroke-width="1.5" />
-  <line x1="28" y1="55" x2="44" y2="54" stroke="#0284c7" stroke-width="1" />
-  <line x1="28" y1="60" x2="44" y2="59" stroke="#0284c7" stroke-width="1" />
-  <line x1="56" y1="54" x2="72" y2="55" stroke="#0284c7" stroke-width="1" />
-  <line x1="56" y1="59" x2="72" y2="60" stroke="#0284c7" stroke-width="1" />
-  <!-- Lower Ribbon / Motto -->
-  <path d="M22,76 Q50,71 78,76 L74,83 Q50,79 26,83 Z" fill="#facc15" stroke="#854d0e" stroke-width="0.8" />
-  <text x="50" y="80.5" font-family="Arial, sans-serif" font-size="4.8" font-weight="bold" fill="#0f172a" text-anchor="middle" letter-spacing="0.3">TUT WURI HANDAYANI</text>
+
+  <!-- Outer Shield Outline -->
+  <path d="M50,4 C84,4 94,18 94,54 C94,82 72,102 50,111 C28,102 6,82 6,54 C6,18 16,4 50,4 Z" fill="#ffffff" stroke="#1e293b" stroke-width="2.5" stroke-linejoin="round" />
+  
+  <!-- Golden Border Layer -->
+  <path d="M50,7 C81,7 90,19 90,53 C90,79 70,98 50,107 C30,98 10,79 10,53 C10,19 19,7 50,7 Z" fill="url(#gold_grad)" stroke="#ca8a04" stroke-width="1.2" />
+
+  <!-- Inner Blue Shield (Sky) -->
+  <path d="M50,11 C77,11 85,21 85,52 C85,76 67,94 50,102 C33,94 15,76 15,52 C15,21 23,11 50,11 Z" fill="url(#shield_sky)" stroke="#0369a1" stroke-width="0.8" />
+
+  <!-- Bintang Segi Lima Emas (Five-Pointed Star) -->
+  <polygon points="50,14 53,22 62,22 55,27 58,36 50,31 42,36 45,27 38,22 47,22" fill="url(#gold_grad)" stroke="#854d0e" stroke-width="0.7" />
+
+  <!-- Gunung Kelud (Green Mountain Peaks) -->
+  <path d="M22,65 Q36,38 50,42 Q64,38 78,65 Q50,70 22,65 Z" fill="url(#mountain_grad)" stroke="#166534" stroke-width="1" />
+  <path d="M35,62 Q43,46 50,47 Q57,46 65,62 Q50,66 35,62 Z" fill="#22c55e" opacity="0.4" />
+
+  <!-- Monumen Simpang Lima Gumul / Keris Candi Silhouette -->
+  <path d="M44,72 L47,56 L53,56 L56,72 Z" fill="url(#gold_grad)" stroke="#854d0e" stroke-width="0.8" />
+  <rect x="42" y="70" width="16" height="4" fill="#ca8a04" stroke="#854d0e" stroke-width="0.6" rx="1" />
+
+  <!-- Padi (Kiri - Yellow) -->
+  <path d="M22,74 C18,60 22,44 32,32" fill="none" stroke="#eab308" stroke-width="3" stroke-linecap="round" stroke-dasharray="2,2.5" />
+  <path d="M24,73 C20,60 24,46 33,35" fill="none" stroke="#ca8a04" stroke-width="1.2" />
+
+  <!-- Kapas (Kanan - White) -->
+  <path d="M78,74 C82,60 78,44 68,32" fill="none" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="3,3" />
+  <path d="M76,73 C80,60 76,46 67,35" fill="none" stroke="#15803d" stroke-width="1.2" />
+
+  <!-- Lower Red & White Base Shield -->
+  <path d="M24,78 Q50,72 76,78 C73,88 62,96 50,100 C38,96 27,88 24,78 Z" fill="url(#red_grad)" stroke="#991b1b" stroke-width="1" />
+  <path d="M29,80 Q50,75 71,80 C69,87 60,93 50,96 C40,93 31,87 29,80 Z" fill="#ffffff" opacity="0.9" />
+
+  <!-- Pita Kuning Semboyan / Bawah -->
+  <path d="M20,86 Q50,81 80,86 L76,93 Q50,88 24,93 Z" fill="url(#gold_grad)" stroke="#a16207" stroke-width="0.8" />
+  <text x="50" y="91" font-family="'Times New Roman', serif" font-size="4.2" font-weight="bold" fill="#0f172a" text-anchor="middle" letter-spacing="0.4">KEDIRI</text>
 </svg>
 `)}`;
 
-export const DEFAULT_RIGHT_LOGO = `data:image/svg+xml;utf8,${encodeURIComponent(`
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
-  <defs>
-    <linearGradient id="dinas_bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#047857" />
-      <stop offset="100%" stop-color="#064e3b" />
-    </linearGradient>
-    <linearGradient id="gold_star" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#fef08a" />
-      <stop offset="50%" stop-color="#f59e0b" />
-      <stop offset="100%" stop-color="#b45309" />
-    </linearGradient>
-  </defs>
-  <!-- Shield with Gold Border -->
-  <path d="M50,4 C78,4 92,18 92,48 C92,72 68,90 50,96 C32,90 8,72 8,48 C8,18 22,4 50,4 Z" fill="url(#dinas_bg)" stroke="#f59e0b" stroke-width="3" />
-  <path d="M50,9 C74,9 86,21 86,48 C86,68 65,84 50,89 C35,84 14,68 14,48 C14,21 26,9 50,9 Z" fill="none" stroke="#ffffff" stroke-width="1.2" opacity="0.85" />
-  <!-- Golden Star -->
-  <polygon points="50,14 53,23 62,23 55,28 58,37 50,32 42,37 45,28 38,23 47,23" fill="url(#gold_star)" stroke="#78350f" stroke-width="0.7" />
-  <!-- Circular Emblem / Ring -->
-  <circle cx="50" cy="52" r="17" fill="#ffffff" stroke="#f59e0b" stroke-width="1.8" />
-  <circle cx="50" cy="52" r="14" fill="#0284c7" />
-  <!-- Inner Symbol (Torch / Education Light) -->
-  <path d="M50,42 L52,47 L48,47 Z" fill="#ef4444" />
-  <circle cx="50" cy="41" r="2.5" fill="#fbbf24" />
-  <path d="M47,48 L53,48 L51,58 L49,58 Z" fill="#facc15" stroke="#78350f" stroke-width="0.5" />
-  <!-- Padi & Kapas Arch -->
-  <path d="M28,62 C26,45 32,32 44,27" fill="none" stroke="#fde047" stroke-width="2" stroke-linecap="round" stroke-dasharray="2,2" />
-  <path d="M72,62 C74,45 68,32 56,27" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-dasharray="2,2" />
-  <!-- Banner DINAS PENDIDIKAN -->
-  <path d="M18,74 Q50,68 82,74 L78,82 Q50,77 22,82 Z" fill="#f59e0b" stroke="#78350f" stroke-width="0.8" />
-  <text x="50" y="79" font-family="Arial, sans-serif" font-size="4.8" font-weight="bold" fill="#0f172a" text-anchor="middle" letter-spacing="0.3">DINAS PENDIDIKAN</text>
-</svg>
-`)}`;
+export const DEFAULT_RIGHT_LOGO = '';
 
 export interface SchoolConfig {
   schoolName: string;
@@ -86,28 +82,28 @@ export interface SchoolConfig {
   headmasterNip: string;
   adminName: string;
   adminNip: string;
-  leftLogo?: string;   // Logo Sekolah / Tut Wuri Handayani (Kiri)
-  rightLogo?: string;  // Logo Dinas Pendidikan / Lambang Daerah (Kanan)
+  leftLogo?: string;   // Logo Pemerintah Kabupaten Kediri (Kiri)
+  rightLogo?: string;  // Logo Tambahan (Opsional)
   showKopLogos?: boolean;
 }
 
 export function getSchoolConfig(): SchoolConfig {
   const savedAdmin = localStorage.getItem('adminName');
-  const normalizedAdmin = (!savedAdmin || savedAdmin.toLowerCase().includes('sekhudin')) ? 'Admin' : savedAdmin;
+  const normalizedAdmin = (!savedAdmin || savedAdmin.toLowerCase().includes('sekhudin')) ? 'Admin TU' : savedAdmin;
 
-  // Retrieve logos with fallback to default presets
+  // Retrieve logos with fallback to official default preset (Lambang Kabupaten Kediri)
   const leftLogo = localStorage.getItem('leftLogo') || localStorage.getItem('schoolLogoLeft') || localStorage.getItem('schoolLogo') || DEFAULT_LEFT_LOGO;
-  const rightLogo = localStorage.getItem('rightLogo') || localStorage.getItem('schoolLogoRight') || DEFAULT_RIGHT_LOGO;
+  const rightLogo = localStorage.getItem('rightLogo') || localStorage.getItem('schoolLogoRight') || '';
   const showKopLogos = localStorage.getItem('showKopLogos') !== 'false';
 
   return {
     schoolName: localStorage.getItem('schoolName') || 'SMP NEGERI 3 KRAS',
     schoolKop: localStorage.getItem('schoolKop') || 'PEMERINTAH KABUPATEN KEDIRI\nDINAS PENDIDIKAN',
-    address: localStorage.getItem('address') || localStorage.getItem('schoolAddress') || 'Jalan Raya Jabang Kras, Kediri, Jawa Timur 64172',
-    phone: localStorage.getItem('phone') || '(0354) 771234',
-    email: localStorage.getItem('email') || 'smpn3kras@kedirikab.go.id',
-    headmaster: localStorage.getItem('headmaster') || 'Dr. Budi Santoso, M.Pd',
-    headmasterNip: localStorage.getItem('headmasterNip') || '19800101 200501 1 001',
+    address: localStorage.getItem('address') || localStorage.getItem('schoolAddress') || 'Jalan Doko, Desa Mojosari, Kecamatan Kras, Kabupaten Kediri 64172',
+    phone: localStorage.getItem('phone') || '085100004614',
+    email: localStorage.getItem('email') || 'smpn3kras@gmail.com',
+    headmaster: localStorage.getItem('headmaster') || 'FARIDA, S.Pd.',
+    headmasterNip: localStorage.getItem('headmasterNip') || '19720325 199703 2 002',
     adminName: normalizedAdmin,
     adminNip: localStorage.getItem('adminNip') || '19900202 201502 2 002',
     leftLogo,
@@ -116,46 +112,82 @@ export function getSchoolConfig(): SchoolConfig {
   };
 }
 
+export interface HeadmasterInfo {
+  name: string;
+  nip: string;
+  rank: string;
+  title: string;
+  position: string;
+}
+
 /**
- * Render official Indonesian School Letterhead / Kop Dinas with Dual Logos
- * Left: Logo Sekolah / Tut Wuri Handayani
- * Center: Nama Instansi & Sekolah
- * Right: Logo Dinas Pendidikan / Pemda
+ * Retrieve Headmaster details dynamically from Data Dewan Guru (db.teachers)
+ */
+export function getHeadmasterDetails(teachersList?: Teacher[] | any[], cfg?: SchoolConfig): HeadmasterInfo {
+  const config = cfg || getSchoolConfig();
+  
+  if (teachersList && teachersList.length > 0) {
+    const found = teachersList.find((t: any) => {
+      const pos = (t.position || '').toLowerCase();
+      const subj = (t.subject || '').toLowerCase();
+      return pos.includes('kepala sekolah') || pos.includes('plt') || subj.includes('kepala sekolah');
+    });
+
+    if (found) {
+      const isPlt = (found.position || '').toLowerCase().includes('plt');
+      return {
+        name: found.name || config.headmaster,
+        nip: found.nip || config.headmasterNip || '',
+        rank: found.rankCategory || found.rank || 'Pembina Utama Muda',
+        title: isPlt ? 'Plt. Kepala SMP Negeri 3 Kras,' : 'Kepala SMP Negeri 3 Kras,',
+        position: found.position || (isPlt ? 'Plt. Kepala Sekolah' : 'Kepala Sekolah')
+      };
+    }
+  }
+
+  // Fallback to config
+  return {
+    name: config.headmaster || 'FARIDA, S.Pd.',
+    nip: config.headmasterNip || '19720325 199703 2 002',
+    rank: 'Pembina Utama Muda',
+    title: 'Plt. Kepala SMP Negeri 3 Kras,',
+    position: 'Plt. Kepala Sekolah'
+  };
+}
+
+/**
+ * Render official Indonesian School Letterhead / Kop Dinas matching official SMP Negeri 3 Kras Kediri template
  */
 export function renderOfficialKopHTML(config: SchoolConfig, isLandscape = true): string {
-  const kopLines = (config.schoolKop || 'PEMERINTAH KABUPATEN KEDIRI\nDINAS PENDIDIKAN').toUpperCase().split('\n').filter(Boolean);
   const leftLogo = config.leftLogo || DEFAULT_LEFT_LOGO;
-  const rightLogo = config.rightLogo || DEFAULT_RIGHT_LOGO;
-  const showLogos = config.showKopLogos !== false;
-
-  const logoH = isLandscape ? '65px' : '56px';
-  const logoW = isLandscape ? '70px' : '60px';
+  const logoH = isLandscape ? '68px' : '64px';
+  const logoW = isLandscape ? '65px' : '60px';
 
   return `
-    <div class="kop-container" style="border-bottom: 3.5px double #000000; padding-bottom: 8px; margin-bottom: 12px; position: relative; width: 100%;">
+    <div class="kop-container" style="border-bottom: 3.5px double #000000; padding-bottom: 6px; margin-bottom: 14px; position: relative; width: 100%;">
       <table style="width: 100%; border: none !important; border-collapse: collapse; margin: 0; background: transparent;">
         <tr style="border: none !important; background: transparent;">
-          ${showLogos && leftLogo ? `
-            <td style="width: ${logoW}; text-align: center; vertical-align: middle; border: none !important; padding: 0 8px 0 0;">
-              <img src="${leftLogo}" alt="Logo Sekolah" style="max-height: ${logoH}; max-width: ${logoW}; height: auto; width: auto; object-fit: contain; display: block; margin: 0 auto;" />
-            </td>
-          ` : `<td style="width: 8px; border: none !important; padding: 0;"></td>`}
+          <td style="width: 75px; text-align: center; vertical-align: middle; border: none !important; padding: 0 8px 0 0;">
+            <img src="${leftLogo}" alt="Logo Pemerintah Kabupaten Kediri" style="max-height: ${logoH}; max-width: ${logoW}; height: auto; width: auto; object-fit: contain; display: block; margin: 0 auto;" />
+          </td>
           
-          <td style="text-align: center; vertical-align: middle; border: none !important; padding: 0 6px;">
-            <div style="font-family: 'Times New Roman', Times, serif; text-transform: uppercase; color: #000000;">
-              ${kopLines.map(line => `<div style="font-size: ${isLandscape ? '11pt' : '10pt'}; font-weight: bold; line-height: 1.25; letter-spacing: 0.5px; margin: 0;">${line}</div>`).join('')}
-              <div style="font-size: ${isLandscape ? '15pt' : '13.5pt'}; font-weight: bold; letter-spacing: 1px; margin: 3px 0 2px 0; line-height: 1.15;">${config.schoolName}</div>
-              <div style="font-size: 8pt; font-weight: normal; font-family: Arial, Helvetica, sans-serif; line-height: 1.35; text-transform: none; color: #111111;">
-                ${config.address} ${config.phone ? `• Telp: ${config.phone}` : ''} ${config.email ? `• Email: ${config.email}` : ''}
+          <td style="text-align: center; vertical-align: middle; border: none !important; padding: 0 4px;">
+            <div style="font-family: 'Times New Roman', Times, serif; color: #000000;">
+              <div style="font-size: ${isLandscape ? '11.5pt' : '11pt'}; font-weight: bold; line-height: 1.2; letter-spacing: 0.5px; text-transform: uppercase; margin: 0;">PEMERINTAH KABUPATEN KEDIRI</div>
+              <div style="font-size: ${isLandscape ? '12pt' : '11.5pt'}; font-weight: bold; line-height: 1.2; letter-spacing: 0.5px; text-transform: uppercase; margin: 1px 0 0 0;">DINAS PENDIDIKAN</div>
+              <div style="font-size: ${isLandscape ? '14.5pt' : '13.5pt'}; font-weight: bold; letter-spacing: 0.8px; text-transform: uppercase; margin: 2px 0 3px 0; line-height: 1.15;">SMP NEGERI 3 KRAS</div>
+              <div style="font-size: 8.5pt; font-weight: normal; line-height: 1.25; color: #000000;">
+                Jalan Doko, Desa Mojosari, Kecamatan Kras, Kabupaten Kediri 64172
+              </div>
+              <div style="font-size: 8.5pt; font-weight: normal; line-height: 1.25; color: #000000;">
+                Telepon 085100004614 Pos-el <span style="text-decoration: underline; color: #0000ee;">smpn3kras@gmail.com</span>
+              </div>
+              <div style="font-size: 8.5pt; font-weight: normal; line-height: 1.25; color: #000000;">
+                Laman: smpntigakras.blogspot.co.id
               </div>
             </div>
           </td>
-
-          ${showLogos && rightLogo ? `
-            <td style="width: ${logoW}; text-align: center; vertical-align: middle; border: none !important; padding: 0 0 0 8px;">
-              <img src="${rightLogo}" alt="Logo Dinas" style="max-height: ${logoH}; max-width: ${logoW}; height: auto; width: auto; object-fit: contain; display: block; margin: 0 auto;" />
-            </td>
-          ` : `<td style="width: 8px; border: none !important; padding: 0;"></td>`}
+          <td style="width: 10px; border: none !important; padding: 0;"></td>
         </tr>
       </table>
     </div>
@@ -169,17 +201,20 @@ export function renderOfficialSignaturesHTML(
   config: SchoolConfig,
   todayStr: string,
   leftRole = 'Kepala Sekolah',
-  rightRole = 'Petugas Persuratan'
+  rightRole = 'Petugas Persuratan',
+  teachersList?: Teacher[]
 ): string {
+  const headmaster = getHeadmasterDetails(teachersList, config);
   return `
     <table style="width: 100%; border: none !important; margin-top: 30px; font-size: 9.5pt; font-family: Arial, Helvetica, sans-serif; page-break-inside: avoid; border-collapse: collapse;">
       <tr style="border: none !important;">
         <td style="width: 45%; text-align: center; border: none !important; vertical-align: top; padding: 0;">
           <div>Mengetahui,</div>
-          <div style="font-weight: bold; margin-top: 2px;">${leftRole}</div>
+          <div style="font-weight: bold; margin-top: 2px;">${headmaster.title.replace(/,$/, '') || leftRole}</div>
           <div style="height: 55px;"></div>
-          <div style="font-weight: bold; text-decoration: underline; font-size: 10pt;">${config.headmaster}</div>
-          <div style="font-size: 9pt; color: #111;">NIP. ${config.headmasterNip}</div>
+          <div style="font-weight: bold; text-decoration: underline; font-size: 10pt;">${headmaster.name}</div>
+          <div style="font-size: 8.5pt; color: #333;">${headmaster.rank}</div>
+          <div style="font-size: 9pt; color: #111;">NIP. ${headmaster.nip}</div>
         </td>
         <td style="width: 10%; border: none !important; padding: 0;"></td>
         <td style="width: 45%; text-align: center; border: none !important; vertical-align: top; padding: 0;">
@@ -1740,8 +1775,9 @@ export async function generateOfficialLetterPDF(letter: Letter, cfg?: SchoolConf
 /**
  * Generates official letter HTML representation for printing and preview
  */
-export async function generateOfficialLetterHTML(letter: Letter, cfg?: SchoolConfig): Promise<string> {
+export async function generateOfficialLetterHTML(letter: Letter, cfg?: SchoolConfig, teachersList?: Teacher[]): Promise<string> {
   const config = cfg || getSchoolConfig();
+  const hm = getHeadmasterDetails(teachersList, config);
   const formattedDocDate = letter.documentDate 
     ? format(new Date(letter.documentDate), 'dd MMMM yyyy', { locale: id }) 
     : format(new Date(letter.date), 'dd MMMM yyyy', { locale: id });
@@ -1826,8 +1862,8 @@ export async function generateOfficialLetterHTML(letter: Letter, cfg?: SchoolCon
             <div>Kediri, ${formattedDocDate}</div>
             <div style="font-weight: bold; margin-top: 2px;">Kepala ${config.schoolName}</div>
             <div style="height: 60px;"></div>
-            <div style="font-weight: bold; text-decoration: underline; font-size: 11.5pt;">${config.headmaster}</div>
-            <div style="font-size: 9.5pt;">NIP. ${config.headmasterNip}</div>
+            <div style="font-weight: bold; text-decoration: underline; font-size: 11.5pt;">${hm.name}</div>
+            <div style="font-size: 9.5pt;">${hm.nip ? `NIP. ${hm.nip}` : (hm.rank ? `Pangkat: ${hm.rank}` : '')}</div>
           </td>
         </tr>
       </table>
@@ -1857,5 +1893,1077 @@ export async function downloadLetterDocument(letter: Letter, cfg?: SchoolConfig)
 
   // Otherwise, generate official letter document PDF on the fly
   await generateOfficialLetterPDF(letter, cfg);
+}
+
+/**
+ * ==============================================================================
+ * DRAF LETTER GENERATORS: SURAT PERMOHONAN & SURAT RESMI SEKOLAH SESUAI PILIHAN
+ * ==============================================================================
+ */
+
+/**
+ * 1. Generates HTML for Surat Permohonan (Dari Guru / Wali Murid ke Kepala Sekolah)
+ */
+export function generateSuratPermohonanHTML(letter: Letter, cfg?: SchoolConfig): string {
+  const config = cfg || getSchoolConfig();
+  const formattedDocDate = letter.documentDate 
+    ? format(new Date(letter.documentDate), 'dd MMMM yyyy', { locale: id }) 
+    : format(new Date(letter.date), 'dd MMMM yyyy', { locale: id });
+  
+  const applicantName = letter.applicantName || letter.receivedBy?.split('(')[0]?.trim() || 'Pemohon';
+  const applicantPhone = letter.applicantPhone || '-';
+  const applicantRole = letter.applicantRole === 'guru' ? 'Guru / Tenaga Pendidik' : (letter.applicantRole === 'wali' ? 'Orang Tua / Wali Murid' : 'Pemohon');
+  
+  return `
+    <div style="background: #ffffff; color: #000000; padding: 25px 30px; font-family: 'Times New Roman', Times, serif; line-height: 1.6; font-size: 11pt; max-width: 800px; margin: 0 auto;">
+      
+      <!-- Tanggal & Lokasi Surat Permohonan -->
+      <table style="width: 100%; border: none !important; border-collapse: collapse; margin-bottom: 15px;">
+        <tr style="border: none !important;">
+          <td style="width: 55%; vertical-align: top; border: none !important; padding: 0;">
+            <div style="font-weight: bold; color: #0f766e; font-size: 9.5pt; font-family: Arial, sans-serif; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
+              [ SURAT PERMOHONAN PENGAJUAN ]
+            </div>
+            <table style="font-size: 11pt; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 2px 0; width: 75px;">Nomor</td>
+                <td style="padding: 2px 0; width: 12px;">:</td>
+                <td style="padding: 2px 0; font-family: monospace; color: #475569;">- (Permohonan Mandiri)</td>
+              </tr>
+              <tr>
+                <td style="padding: 2px 0;">Lampiran</td>
+                <td style="padding: 2px 0;">:</td>
+                <td style="padding: 2px 0;">1 (Satu) Berkas Pengajuan</td>
+              </tr>
+              <tr>
+                <td style="padding: 2px 0; vertical-align: top;">Perihal</td>
+                <td style="padding: 2px 0; vertical-align: top;">:</td>
+                <td style="padding: 2px 0; font-weight: bold; text-decoration: underline;">
+                  Permohonan Penerbitan ${letter.title}
+                </td>
+              </tr>
+            </table>
+          </td>
+          <td style="width: 45%; vertical-align: top; text-align: right; border: none !important; padding: 0;">
+            <div style="margin-bottom: 12px; font-size: 11pt;">Kediri, ${formattedDocDate}</div>
+            <div style="text-align: left; display: inline-block; font-size: 11pt;">
+              <div>Kepada Yth.</div>
+              <div style="font-weight: bold; margin: 2px 0;">Kepala ${config.schoolName}</div>
+              <div>di -</div>
+              <div style="margin-left: 20px;">Tempat</div>
+            </div>
+          </td>
+        </tr>
+      </table>
+
+      <div style="margin-top: 20px; text-align: justify;">
+        Dengan hormat,
+      </div>
+
+      <div style="margin-top: 8px; text-align: justify; text-indent: 30px;">
+        Saya yang bertanda tangan di bawah ini:
+      </div>
+
+      <table style="width: 100%; margin: 10px 0 15px 30px; font-size: 11pt; border-collapse: collapse; border: none !important;">
+        <tr style="border: none !important;">
+          <td style="width: 180px; padding: 3px 0; border: none !important;">Nama Lengkap</td>
+          <td style="width: 15px; padding: 3px 0; border: none !important;">:</td>
+          <td style="font-weight: bold; padding: 3px 0; border: none !important;">${applicantName}</td>
+        </tr>
+        <tr style="border: none !important;">
+          <td style="padding: 3px 0; border: none !important;">Status / Peran</td>
+          <td style="padding: 3px 0; border: none !important;">:</td>
+          <td style="padding: 3px 0; border: none !important;">${applicantRole}</td>
+        </tr>
+        <tr style="border: none !important;">
+          <td style="padding: 3px 0; border: none !important;">No. Telepon / WhatsApp</td>
+          <td style="padding: 3px 0; border: none !important;">:</td>
+          <td style="padding: 3px 0; font-family: monospace; border: none !important; color: #047857; font-weight: bold;">${applicantPhone}</td>
+        </tr>
+      </table>
+
+      <div style="text-align: justify; text-indent: 30px; margin-bottom: 10px;">
+        Dengan ini bermaksud mengajukan permohonan kepada Bapak/Ibu Kepala ${config.schoolName} agar kiranya berkenan menerbitkan naskah surat dinas resmi perihal <b>"${letter.title}"</b> dengan uraian dan rincian data sebagai berikut:
+      </div>
+
+      <!-- Kotak Rincian Permohonan -->
+      <div style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 14px 18px; margin: 14px 0; font-size: 10.5pt; font-family: Arial, sans-serif; line-height: 1.55;">
+        <div style="font-weight: bold; color: #0284c7; margin-bottom: 6px; text-transform: uppercase; font-size: 9pt; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">
+          Rincian Informasi Pengajuan:
+        </div>
+        <div style="white-space: pre-wrap; color: #1e293b;">${letter.description || `Permohonan penerbitan dokumen ${letter.title} untuk tertib administrasi.`}</div>
+      </div>
+
+      <div style="text-align: justify; text-indent: 30px; margin-top: 15px;">
+        Demikian surat permohonan ini saya ajukan dengan sebenar-benarnya dan penuh tanggung jawab. Besar harapan saya kiranya Bapak/Ibu Kepala Sekolah berkenan memproses serta menerbitkan surat dinas yang dimaksud.
+      </div>
+      <div style="text-align: justify; text-indent: 30px; margin-top: 6px;">
+        Atas perhatian, bantuan, dan kebijaksanaan yang diberikan, saya sampaikan terima kasih.
+      </div>
+
+      <!-- Tanda Tangan Pemohon -->
+      <table style="width: 100%; border: none !important; margin-top: 35px; border-collapse: collapse; page-break-inside: avoid;">
+        <tr style="border: none !important;">
+          <td style="width: 50%; border: none !important; padding: 0;"></td>
+          <td style="width: 50%; text-align: center; border: none !important; padding: 0;">
+            <div>Kediri, ${formattedDocDate}</div>
+            <div style="margin-top: 4px;">Hormat saya,</div>
+            <div style="font-style: italic; color: #64748b; font-size: 9.5pt;">Pemohon (${applicantRole})</div>
+            <div style="height: 55px;"></div>
+            <div style="font-weight: bold; text-decoration: underline; font-size: 11.5pt;">${applicantName}</div>
+            <div style="font-size: 9.5pt; color: #334155;">No. HP/WA: ${applicantPhone}</div>
+          </td>
+        </tr>
+      </table>
+
+    </div>
+  `;
+}
+
+export interface SuratTugasParsed {
+  dasar: string;
+  name: string;
+  nip: string;
+  rank: string;
+  position: string;
+  purpose: string;
+  day: string;
+  dateStr: string;
+  timeStr: string;
+  location: string;
+}
+
+export function parseSuratTugasData(letter: Letter, teachersList?: Teacher[] | any[]): SuratTugasParsed {
+  const desc = letter.description || '';
+  
+  // Extract Dasar - Default is strictly 'Perintah Kepala Sekolah'
+  let dasar = 'Perintah Kepala Sekolah';
+  const dasarMatch = desc.match(/Dasar\s*(?:Penugasan)?\s*:\s*([^\n\r]+(?:\n(?!\s*(?:Kepada|MEMERINTAHKAN|•|Untuk|Nama|NIP))[^\n\r]+)*)/i);
+  if (dasarMatch && dasarMatch[1]) {
+    const dVal = dasarMatch[1].trim();
+    if (dVal) {
+      dasar = dVal;
+    }
+  }
+
+  // Extract Name
+  let name = letter.applicantName || letter.receivedBy?.split('(')[0]?.trim() || '';
+  const nameMatch = desc.match(/(?:Nama|Nama Lengkap|Nama Pendidik)\s*:\s*([^\n\r]+)/i);
+  if (nameMatch && nameMatch[1]) {
+    name = nameMatch[1].replace(/^[•\-*\s]+/, '').trim();
+  }
+  if (!name) name = 'Guru / Pegawai Yang Ditugaskan';
+
+  // Extract NIP
+  let nip = '-';
+  const nipMatch = desc.match(/NIP\s*(?:\/\s*NUPTK)?\s*:\s*([^\n\r]+)/i);
+  if (nipMatch && nipMatch[1]) {
+    nip = nipMatch[1].replace(/^[•\-*\s]+/, '').trim();
+  }
+
+  // Extract Pangkat / Gol
+  let rank = 'Penata Muda / III/a';
+  const rankMatch = desc.match(/(?:Pangkat\/Gol|Pangkat\s*\/\s*Golongan|Pangkat\/Gol\.Ruang)\s*:\s*([^\n\r]+)/i);
+  if (rankMatch && rankMatch[1]) {
+    rank = rankMatch[1].replace(/^[•\-*\s]+/, '').trim();
+  }
+
+  // Extract Jabatan
+  let position = 'Guru Mata Pelajaran';
+  const posMatch = desc.match(/(?:Jabatan|Jabatan\/Unit|Jabatan Sekolah)\s*:\s*([^\n\r]+)/i);
+  if (posMatch && posMatch[1]) {
+    position = posMatch[1].replace(/^[•\-*\s]+/, '').trim();
+  }
+
+  // Match from teachers database if available
+  if (teachersList && teachersList.length > 0) {
+    const matched = teachersList.find((t: any) => 
+      t.name.toLowerCase().includes(name.toLowerCase()) || name.toLowerCase().includes(t.name.toLowerCase())
+    );
+    if (matched) {
+      if (!nip || nip === '-') nip = matched.nip || '-';
+      if (rank === 'Penata Muda / III/a' && (matched.rankCategory || matched.rank)) {
+        rank = matched.rankCategory || matched.rank;
+      }
+      if (position === 'Guru Mata Pelajaran' && (matched.position || matched.subject)) {
+        position = matched.position || matched.subject;
+      }
+    }
+  }
+
+  // Extract Purpose / Uraian Tugas
+  let purpose = letter.title.replace(/^(?:Permohonan\s+)?(?:Surat\s+)?(?:Perintah\s+)?(?:Tugas\s+)?(?:Guru\s+)?(?:-\s+)?/i, '').trim();
+  const purposeMatch = desc.match(/(?:Untuk melaksanakan tugas kedinasan perihal|Terkait perihal|Tugas \/ Kegiatan|Untuk keperluan|Untuk\s*:)\s*"?([^"\n\r]+)"?/i);
+  if (purposeMatch && purposeMatch[1]) {
+    purpose = purposeMatch[1].trim();
+  }
+  if (!purpose) purpose = letter.title;
+
+  // Extract Location
+  let location = 'SMP Negeri 3 Kras / Tempat Kegiatan';
+  const locMatch = desc.match(/(?:Tempat \/ Lokasi|Tempat Pelaksanaan|Tempat|Lokasi)\s*:\s*([^\n\r]+)/i);
+  if (locMatch && locMatch[1]) {
+    location = locMatch[1].replace(/^[•\-*\s]+/, '').trim();
+  }
+
+  // Extract Dates & Time
+  const docDateObj = letter.documentDate ? new Date(letter.documentDate) : (letter.date ? new Date(letter.date) : new Date());
+  
+  let day = format(docDateObj, 'EEEE', { locale: id });
+  const dayMatch = desc.match(/Hari\s*:\s*([^\n\r]+)/i);
+  if (dayMatch && dayMatch[1]) {
+    day = dayMatch[1].replace(/^[•\-*\s]+/, '').trim();
+  }
+
+  let dateStr = format(docDateObj, 'dd MMMM yyyy', { locale: id });
+  const dateMatch = desc.match(/(?:Tanggal|Waktu \/ Tanggal|Waktu Pelaksanaan)\s*:\s*([^\n\r]+)/i);
+  if (dateMatch && dateMatch[1]) {
+    dateStr = dateMatch[1].replace(/^[•\-*\s]+/, '').trim();
+  }
+
+  let timeStr = '08.00 WIB s.d Selesai';
+  const timeMatch = desc.match(/Pukul\s*:\s*([^\n\r]+)/i);
+  if (timeMatch && timeMatch[1]) {
+    timeStr = timeMatch[1].replace(/^[•\-*\s]+/, '').trim();
+  }
+
+  return {
+    dasar,
+    name,
+    nip,
+    rank,
+    position,
+    purpose,
+    day,
+    dateStr,
+    timeStr,
+    location
+  };
+}
+
+/**
+ * 2. Generates HTML for Surat Resmi Sekolah Sesuai Draf yang Dipilih (Naskah Dinas Resmi Ber-KOP)
+ */
+export async function generateSuratDinasResmiHTML(letter: Letter, cfg?: SchoolConfig, teachersList?: Teacher[]): Promise<string> {
+  const config = cfg || getSchoolConfig();
+  const formattedDocDate = letter.documentDate 
+    ? format(new Date(letter.documentDate), 'dd MMMM yyyy', { locale: id }) 
+    : format(new Date(letter.date), 'dd MMMM yyyy', { locale: id });
+  
+  const qrUrl = await generateLetterQRCode(letter);
+  const templateType = letter.templateType || '';
+  const isSuratTugas = templateType === 'guru_tugas' || templateType === 'surat-tugas' || letter.title.toLowerCase().includes('tugas');
+  const headmaster = getHeadmasterDetails(teachersList, config);
+
+  // KHUSUS FORMAT RESMI: SURAT PERINTAH TUGAS (Sesuai Standar Naskah Dinas Kedinasan Pemerintah Kabupaten Kediri)
+  if (isSuratTugas) {
+    const data = parseSuratTugasData(letter, teachersList);
+    const refNum = letter.referenceNumber || `420.3/....../418.20.2.62.03/${new Date().getFullYear()}`;
+
+    return `
+      <div style="background: #ffffff; color: #000000; padding: 20px 25px; font-family: 'Times New Roman', Times, serif; line-height: 1.45; font-size: 11pt; max-width: 800px; margin: 0 auto;">
+        
+        <!-- KOP RESMI SEKOLAH -->
+        ${renderOfficialKopHTML(config, false)}
+
+        <!-- JUDUL SURAT PERINTAH TUGAS -->
+        <div style="text-align: center; margin: 12px 0 16px 0;">
+          <div style="font-size: 12.5pt; font-weight: bold; text-decoration: underline; text-transform: uppercase; letter-spacing: 0.5px;">
+            SURAT PERINTAH TUGAS
+          </div>
+          <div style="font-size: 11pt; margin-top: 2px;">
+            Nomor : <span style="font-family: 'Times New Roman', Times, serif;">${refNum}</span>
+          </div>
+        </div>
+
+        <!-- DASAR -->
+        <table style="width: 100%; border: none !important; margin-bottom: 12px; font-size: 11pt; border-collapse: collapse;">
+          <tr style="border: none !important;">
+            <td style="width: 25%; vertical-align: top; border: none !important; padding: 2px 0;">Dasar</td>
+            <td style="width: 3%; vertical-align: top; border: none !important; padding: 2px 0;">:</td>
+            <td style="width: 72%; vertical-align: top; border: none !important; padding: 2px 0; text-align: justify;">
+              ${data.dasar}
+            </td>
+          </tr>
+        </table>
+
+        <!-- MEMERINTAHKAN -->
+        <div style="text-align: center; font-weight: bold; font-size: 11pt; margin: 14px 0 12px 0; letter-spacing: 0.5px;">
+          MEMERINTAHKAN :
+        </div>
+
+        <!-- KEPADA SAUDARA -->
+        <table style="width: 100%; border: none !important; margin-bottom: 14px; font-size: 11pt; border-collapse: collapse;">
+          <tr style="border: none !important;">
+            <td style="width: 25%; vertical-align: top; border: none !important; padding: 2px 0;">Kepada Saudara.</td>
+            <td style="width: 3%; vertical-align: top; border: none !important; padding: 2px 0;">:</td>
+            <td style="width: 72%; vertical-align: top; border: none !important; padding: 2px 0;"></td>
+          </tr>
+          <tr style="border: none !important;">
+            <td style="width: 25%; vertical-align: top; border: none !important; padding: 2px 0;">Nama</td>
+            <td style="width: 3%; vertical-align: top; border: none !important; padding: 2px 0;">:</td>
+            <td style="width: 72%; vertical-align: top; border: none !important; padding: 2px 0; font-weight: bold;">${data.name}</td>
+          </tr>
+          <tr style="border: none !important;">
+            <td style="width: 25%; vertical-align: top; border: none !important; padding: 2px 0;">NIP</td>
+            <td style="width: 3%; vertical-align: top; border: none !important; padding: 2px 0;">:</td>
+            <td style="width: 72%; vertical-align: top; border: none !important; padding: 2px 0;">${data.nip}</td>
+          </tr>
+          <tr style="border: none !important;">
+            <td style="width: 25%; vertical-align: top; border: none !important; padding: 2px 0;">Pangkat/Gol.Ruang</td>
+            <td style="width: 3%; vertical-align: top; border: none !important; padding: 2px 0;">:</td>
+            <td style="width: 72%; vertical-align: top; border: none !important; padding: 2px 0;">${data.rank}</td>
+          </tr>
+          <tr style="border: none !important;">
+            <td style="width: 25%; vertical-align: top; border: none !important; padding: 2px 0;">Jabatan</td>
+            <td style="width: 3%; vertical-align: top; border: none !important; padding: 2px 0;">:</td>
+            <td style="width: 72%; vertical-align: top; border: none !important; padding: 2px 0;">${data.position}</td>
+          </tr>
+        </table>
+
+        <!-- UNTUK -->
+        <table style="width: 100%; border: none !important; margin-bottom: 12px; font-size: 11pt; border-collapse: collapse;">
+          <tr style="border: none !important;">
+            <td style="width: 25%; vertical-align: top; border: none !important; padding: 2px 0;">Untuk</td>
+            <td style="width: 3%; vertical-align: top; border: none !important; padding: 2px 0;">:</td>
+            <td style="width: 72%; vertical-align: top; border: none !important; padding: 2px 0; text-align: justify;">
+              ${data.purpose}
+            </td>
+          </tr>
+        </table>
+
+        <!-- RINCIAN WAKTU & TEMPAT UNTUK (MENJOROK SESUAI TATA LETAK RESMI) -->
+        <table style="width: 100%; border: none !important; margin-bottom: 14px; font-size: 11pt; border-collapse: collapse;">
+          <tr style="border: none !important;">
+            <td style="width: 28%; border: none !important;"></td>
+            <td style="width: 15%; vertical-align: top; border: none !important; padding: 2px 0;">Hari</td>
+            <td style="width: 3%; vertical-align: top; border: none !important; padding: 2px 0;">:</td>
+            <td style="width: 54%; vertical-align: top; border: none !important; padding: 2px 0;">${data.day}</td>
+          </tr>
+          <tr style="border: none !important;">
+            <td style="width: 28%; border: none !important;"></td>
+            <td style="width: 15%; vertical-align: top; border: none !important; padding: 2px 0;">Tanggal</td>
+            <td style="width: 3%; vertical-align: top; border: none !important; padding: 2px 0;">:</td>
+            <td style="width: 54%; vertical-align: top; border: none !important; padding: 2px 0;">${data.dateStr}</td>
+          </tr>
+          <tr style="border: none !important;">
+            <td style="width: 28%; border: none !important;"></td>
+            <td style="width: 15%; vertical-align: top; border: none !important; padding: 2px 0;">Pukul</td>
+            <td style="width: 3%; vertical-align: top; border: none !important; padding: 2px 0;">:</td>
+            <td style="width: 54%; vertical-align: top; border: none !important; padding: 2px 0;">${data.timeStr}</td>
+          </tr>
+          <tr style="border: none !important;">
+            <td style="width: 28%; border: none !important;"></td>
+            <td style="width: 15%; vertical-align: top; border: none !important; padding: 2px 0;">Tempat</td>
+            <td style="width: 3%; vertical-align: top; border: none !important; padding: 2px 0;">:</td>
+            <td style="width: 54%; vertical-align: top; border: none !important; padding: 2px 0;">${data.location}</td>
+          </tr>
+        </table>
+
+        <!-- PENUTUP -->
+        <div style="margin-top: 14px; text-align: justify; line-height: 1.5;">
+          Demikian surat tugas ini dibuat untuk dilaksanakan dengan penuh tanggung jawab.
+        </div>
+
+        <!-- TANDA TANGAN KEPALA SEKOLAH (DARI DEWAN GURU) & QR VALIDASI -->
+        <table style="width: 100%; border: none !important; margin-top: 25px; border-collapse: collapse; page-break-inside: avoid;">
+          <tr style="border: none !important;">
+            <td style="width: 45%; vertical-align: top; border: none !important; padding: 0;">
+              <div style="display: flex; align-items: center; gap: 8px; border: 1px solid #cbd5e1; padding: 5px 8px; border-radius: 6px; width: fit-content; background: #fafafa;">
+                <img src="${qrUrl}" alt="QR Validasi" style="width: 46px; height: 46px;" />
+                <div style="font-family: Arial, sans-serif; font-size: 7pt; color: #475569;">
+                  <div style="font-weight: bold; color: #0284c7;">VERIFIKASI RESMI</div>
+                  <div style="font-weight: bold;">SMP NEGERI 3 KRAS</div>
+                  <div style="font-family: monospace; font-size: 6pt; color: #64748b;">${refNum}</div>
+                </div>
+              </div>
+            </td>
+            <td style="width: 10%; border: none !important;"></td>
+            <td style="width: 45%; text-align: center; vertical-align: top; border: none !important; padding: 0;">
+              <div>Kras, ${formattedDocDate}</div>
+              <div style="font-weight: bold; margin-top: 2px;">${headmaster.title}</div>
+              <div style="height: 50px;"></div>
+              <div style="font-weight: bold; text-decoration: underline; font-size: 11pt;">${headmaster.name}</div>
+              <div style="font-size: 9.5pt;">${headmaster.rank}</div>
+              <div style="font-size: 9.5pt;">NIP. ${headmaster.nip}</div>
+            </td>
+          </tr>
+        </table>
+
+        <!-- CATATAN FOOTER -->
+        <div style="margin-top: 25px; font-size: 9.5pt; color: #000000;">
+          <div>Catatan :</div>
+          <div style="margin-left: 10px;">- &nbsp;Harap melaporkan hasil kegiatan kepada Pimpinan / Kepala Sekolah.</div>
+        </div>
+
+      </div>
+    `;
+  }
+
+  // Determine official title & structure based on selected draft
+  let officialTitle = 'SURAT DINAS RESMI';
+  let isUnderlinedTitle = true;
+
+  if (templateType === 'wali_aktif' || templateType === 'aktif-belajar') {
+    officialTitle = 'SURAT KETERANGAN SISWA AKTIF BELAJAR';
+  } else if (templateType === 'guru_izin' || templateType === 'guru_cuti') {
+    officialTitle = 'SURAT KETERANGAN IZIN / CUTI PEGAWAI';
+  } else if (templateType === 'wali_pindah' || templateType === 'pindah-sekolah') {
+    officialTitle = 'SURAT KETERANGAN PINDAH SEKOLAH';
+  } else if (templateType === 'wali_kelakuan_baik' || templateType === 'kelakuan-baik') {
+    officialTitle = 'SURAT KETERANGAN BERKELAKUAN BAIK';
+  } else if (templateType === 'wali_dispensasi' || templateType === 'dispensasi-siswa') {
+    officialTitle = 'SURAT DISPENSASI SISWA';
+  } else if (templateType === 'guru_rekomendasi_lomba' || templateType === 'rekomendasi-beasiswa') {
+    officialTitle = 'SURAT REKOMENDASI';
+  } else if (letter.title) {
+    officialTitle = letter.title.toUpperCase();
+  }
+
+  return `
+    <div style="background: #ffffff; color: #000000; padding: 25px 30px; font-family: 'Times New Roman', Times, serif; line-height: 1.5; font-size: 11pt; max-width: 800px; margin: 0 auto;">
+      
+      <!-- KOP RESMI SEKOLAH DUAL LOGO -->
+      ${renderOfficialKopHTML(config, false)}
+
+      <!-- JUDUL SURAT RESMI & NOMOR REGISTER -->
+      <div style="text-align: center; margin: 15px 0 20px 0;">
+        <div style="font-size: 13pt; font-weight: bold; ${isUnderlinedTitle ? 'text-decoration: underline;' : ''} text-transform: uppercase; letter-spacing: 0.5px;">
+          ${officialTitle}
+        </div>
+        <div style="font-size: 10.5pt; margin-top: 3px; font-family: 'Times New Roman', Times, serif;">
+          Nomor : <span style="font-family: monospace; font-weight: bold;">${letter.referenceNumber || '421/DRAF/SMP.03/' + new Date().getFullYear()}</span>
+        </div>
+      </div>
+
+      <!-- KONTEN SURAT DINAS RESMI -->
+      <div style="text-align: justify; text-indent: 30px; line-height: 1.6;">
+        Yang bertanda tangan di bawah ini Kepala ${config.schoolName}, Kabupaten Kediri, dengan ini menerangkan / memberikan keputusan sebagai berikut:
+      </div>
+
+      <div style="margin: 14px 0 14px 10px; line-height: 1.65;">
+        ${letter.description ? letter.description.replace(/\n/g, '<br/>') : `Terkait penerbitan naskah surat dinas mengenai ${letter.title}, agar dapat dipergunakan sebagaimana mestinya.`}
+      </div>
+
+      ${letter.source === 'portal_guru_wali' || letter.applicantName ? `
+        <div style="margin: 14px 0; padding: 8px 12px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 4px; font-family: Arial, sans-serif; font-size: 8.5pt;">
+          <div style="font-weight: bold; color: #0284c7;">STATUS VERIFIKASI & LEGALITAS NASKAH:</div>
+          <div style="color: #334155;">Diterbitkan berdasarkan pengajuan resmi oleh: <b>${letter.applicantName || 'Pemohon'}</b> (${letter.applicantRole === 'guru' ? 'Guru' : 'Wali Murid'}) - Status: <b>${letter.submissionStatus === 'approved' ? 'Telah Diverifikasi & Sah' : 'Draf Pengajuan Terdaftar'}</b>.</div>
+        </div>
+      ` : ''}
+
+      <div style="margin-top: 14px; text-align: justify; text-indent: 30px; line-height: 1.6;">
+        Demikian surat dinas ini kami buat dengan sebenarnya agar dapat dipergunakan sebagaimana mestinya oleh pihak yang berkepentingan.
+      </div>
+
+      <!-- TANDA TANGAN KEPALA SEKOLAH & QR VALIDASI -->
+      <table style="width: 100%; border: none !important; margin-top: 35px; border-collapse: collapse; page-break-inside: avoid;">
+        <tr style="border: none !important;">
+          <td style="width: 45%; vertical-align: top; border: none !important; padding: 0;">
+            <div style="display: flex; align-items: center; gap: 10px; border: 1px solid #cbd5e1; padding: 6px 10px; border-radius: 6px; width: fit-content; background: #fafafa;">
+              <img src="${qrUrl}" alt="QR Validasi" style="width: 58px; height: 58px;" />
+              <div style="font-family: Arial, sans-serif; font-size: 7.5pt; color: #475569;">
+                <div style="font-weight: bold; color: #0284c7;">VERIFIKASI RESMI</div>
+                <div style="font-weight: bold;">SMP NEGERI 3 KRAS</div>
+                <div style="font-family: monospace; font-size: 6.5pt; color: #64748b;">${letter.referenceNumber}</div>
+              </div>
+            </div>
+          </td>
+          <td style="width: 10%; border: none !important;"></td>
+          <td style="width: 45%; text-align: center; vertical-align: top; border: none !important; padding: 0;">
+            <div>Kediri, ${formattedDocDate}</div>
+            <div style="font-weight: bold; margin-top: 2px;">${headmaster.title}</div>
+            <div style="height: 55px;"></div>
+            <div style="font-weight: bold; text-decoration: underline; font-size: 11.5pt;">${headmaster.name}</div>
+            <div style="font-size: 9.5pt;">${headmaster.rank}</div>
+            <div style="font-size: 9.5pt;">NIP. ${headmaster.nip}</div>
+          </td>
+        </tr>
+      </table>
+
+    </div>
+  `;
+}
+
+/**
+ * 3. Generates Combined HTML (Surat Permohonan + Surat Resmi Sekolah)
+ */
+export async function generateCombinedDraftHTML(letter: Letter, cfg?: SchoolConfig, teachersList?: Teacher[]): Promise<string> {
+  const permohonanHtml = generateSuratPermohonanHTML(letter, cfg);
+  const resmiHtml = await generateSuratDinasResmiHTML(letter, cfg, teachersList);
+
+  return `
+    <div style="width: 100%; background: #ffffff; color: #000000;">
+      <!-- HALAMAN 1: SURAT PERMOHONAN -->
+      <div style="padding-bottom: 20px;">
+        <div style="background: #f0fdf4; border: 1px solid #86efac; border-radius: 6px; padding: 8px 12px; margin-bottom: 14px; font-family: Arial, sans-serif; font-size: 9pt; color: #166534; font-weight: bold; display: flex; align-items: center; justify-content: space-between;">
+          <span>📄 HALAMAN 1: SURAT PERMOHONAN DARI PEMOHON (${(letter.applicantRole || 'Guru/Wali').toUpperCase()})</span>
+          <span style="font-size: 8pt; font-weight: normal;">Arsip Pengajuan</span>
+        </div>
+        ${permohonanHtml}
+      </div>
+
+      <!-- PEMBATAS HALAMAN CETAK -->
+      <div style="page-break-after: always; height: 1px; margin: 30px 0; border-bottom: 2px dashed #94a3b8; text-align: center; position: relative;">
+        <span style="background: #ffffff; padding: 0 10px; font-size: 8.5pt; color: #64748b; font-family: Arial, sans-serif; position: relative; top: -10px;">
+          --- BATAS HALAMAN CETAK DOKUMEN ---
+        </span>
+      </div>
+
+      <!-- HALAMAN 2: SURAT DINAS RESMI SEKOLAH -->
+      <div style="padding-top: 10px;">
+        <div style="background: #eff6ff; border: 1px solid #93c5fd; border-radius: 6px; padding: 8px 12px; margin-bottom: 14px; font-family: Arial, sans-serif; font-size: 9pt; color: #1e40af; font-weight: bold; display: flex; align-items: center; justify-content: space-between;">
+          <span>📜 HALAMAN 2: SURAT DINAS RESMI SEKOLAH SESUAI DRAF YANG DIPILIH</span>
+          <span style="font-size: 8pt; font-weight: normal;">Naskah Resmi Sekolah</span>
+        </div>
+        ${resmiHtml}
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * 4. Generates and Downloads PDF for Surat Permohonan (Single Page)
+ */
+export function generateSuratPermohonanPDF(letter: Letter, cfg?: SchoolConfig, saveDoc = true): jsPDF {
+  const config = cfg || getSchoolConfig();
+  const doc = new jsPDF('p', 'mm', 'a4');
+  const formattedDocDate = letter.documentDate 
+    ? format(new Date(letter.documentDate), 'dd MMMM yyyy', { locale: id }) 
+    : format(new Date(letter.date), 'dd MMMM yyyy', { locale: id });
+
+  const applicantName = letter.applicantName || letter.receivedBy?.split('(')[0]?.trim() || 'Pemohon';
+  const applicantPhone = letter.applicantPhone || '-';
+  const applicantRole = letter.applicantRole === 'guru' ? 'Guru / Tenaga Pendidik' : (letter.applicantRole === 'wali' ? 'Orang Tua / Wali Murid' : 'Pemohon');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(15, 118, 110);
+  doc.text('SURAT PERMOHONAN PENGAJUAN', 15, 20);
+  doc.setTextColor(0, 0, 0);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Kediri, ${formattedDocDate}`, 140, 20);
+
+  doc.text('Nomor', 15, 28);
+  doc.text(':', 35, 28);
+  doc.text('- (Permohonan Mandiri)', 38, 28);
+
+  doc.text('Lampiran', 15, 34);
+  doc.text(':', 35, 34);
+  doc.text('1 (Satu) Berkas Pengajuan', 38, 34);
+
+  doc.text('Perihal', 15, 40);
+  doc.text(':', 35, 40);
+  doc.setFont('helvetica', 'bold');
+  const splitTitle = doc.splitTextToSize(`Permohonan Penerbitan ${letter.title}`, 85);
+  doc.text(splitTitle, 38, 40);
+
+  // Recipient
+  doc.setFont('helvetica', 'normal');
+  doc.text('Kepada Yth :', 140, 28);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`Kepala ${config.schoolName}`, 140, 34);
+  doc.setFont('helvetica', 'normal');
+  doc.text('di -', 140, 40);
+  doc.text('     Tempat', 140, 45);
+
+  const bodyStartY = Math.max(50 + (splitTitle.length * 5), 58);
+  doc.setDrawColor(200, 200, 200);
+  doc.line(15, bodyStartY - 4, 195, bodyStartY - 4);
+
+  doc.text('Dengan hormat,', 15, bodyStartY);
+  doc.text('Saya yang bertanda tangan di bawah ini:', 15, bodyStartY + 6);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('Nama Lengkap', 20, bodyStartY + 14);
+  doc.text('Status / Peran', 20, bodyStartY + 20);
+  doc.text('No. HP / WhatsApp', 20, bodyStartY + 26);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`:  ${applicantName}`, 65, bodyStartY + 14);
+  doc.text(`:  ${applicantRole}`, 65, bodyStartY + 20);
+  doc.text(`:  ${applicantPhone}`, 65, bodyStartY + 26);
+
+  const introY = bodyStartY + 35;
+  const introText = `Dengan ini mengajukan permohonan kepada Bapak/Ibu Kepala ${config.schoolName} agar kiranya berkenan menerbitkan naskah surat dinas resmi perihal "${letter.title}" dengan rincian data sebagai berikut:`;
+  const splitIntro = doc.splitTextToSize(introText, 180);
+  doc.text(splitIntro, 15, introY);
+
+  // Rincian Box
+  const boxY = introY + (splitIntro.length * 5.2) + 3;
+  const splitDesc = doc.splitTextToSize(letter.description || letter.title, 170);
+  const boxHeight = Math.max(splitDesc.length * 5 + 14, 28);
+
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(203, 213, 225);
+  doc.roundedRect(15, boxY, 180, boxHeight, 2, 2, 'FD');
+
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(2, 132, 199);
+  doc.text('RINCIAN MAKSUD & DATA PENGAJUAN:', 19, boxY + 5.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(30, 41, 59);
+  doc.text(splitDesc, 19, boxY + 11.5);
+  doc.setTextColor(0, 0, 0);
+
+  const closingY = boxY + boxHeight + 8;
+  doc.setFontSize(10);
+  const closingText = 'Demikian surat permohonan ini saya ajukan dengan sebenar-benarnya. Besar harapan saya kiranya Bapak/Ibu berkenan memproses dan menerbitkan surat yang dimaksud. Atas perhatian dan bantuannya disampaikan terima kasih.';
+  const splitClosing = doc.splitTextToSize(closingText, 180);
+  doc.text(splitClosing, 15, closingY);
+
+  // Signature
+  const sigY = Math.max(closingY + (splitClosing.length * 5) + 12, 225);
+  doc.text(`Kediri, ${formattedDocDate}`, 140, sigY);
+  doc.text('Hormat saya, Pemohon', 140, sigY + 5);
+  doc.setFont('helvetica', 'bold');
+  doc.text(applicantName, 140, sigY + 24);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.text(`No. HP: ${applicantPhone}`, 140, sigY + 28);
+
+  if (saveDoc) {
+    const cleanTitle = (letter.title || 'Permohonan').replace(/[^a-zA-Z0-9]/g, '_');
+    doc.save(`Surat_Permohonan_${cleanTitle}_${applicantName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`);
+  }
+
+  return doc;
+}
+
+/**
+ * 5. Generates and Downloads PDF for Surat Dinas Resmi Sekolah Sesuai Draf
+ */
+export async function generateSuratDinasResmiPDF(letter: Letter, cfg?: SchoolConfig, saveDoc = true, teachersList?: Teacher[]): Promise<jsPDF> {
+  const config = cfg || getSchoolConfig();
+  const doc = new jsPDF('p', 'mm', 'a4');
+  const headmaster = getHeadmasterDetails(teachersList, config);
+  
+  // Kop Resmi Sekolah
+  drawPdfKopHeader(doc, config, false);
+
+  const formattedDocDate = letter.documentDate 
+    ? format(new Date(letter.documentDate), 'dd MMMM yyyy', { locale: id }) 
+    : format(new Date(letter.date), 'dd MMMM yyyy', { locale: id });
+
+  const templateType = letter.templateType || '';
+  const isSuratTugas = templateType === 'guru_tugas' || templateType === 'surat-tugas' || letter.title.toLowerCase().includes('tugas');
+
+  if (isSuratTugas) {
+    const data = parseSuratTugasData(letter, teachersList);
+    const refNum = letter.referenceNumber || `420.3/....../418.20.2.62.03/${new Date().getFullYear()}`;
+
+    // Title
+    doc.setFont('times', 'bold');
+    doc.setFontSize(12);
+    doc.text('SURAT PERINTAH TUGAS', 105, 45, { align: 'center' });
+    const titleWidth = doc.getTextWidth('SURAT PERINTAH TUGAS');
+    doc.line(105 - (titleWidth / 2), 46.2, 105 + (titleWidth / 2), 46.2);
+    doc.setFont('times', 'normal');
+    doc.setFontSize(10);
+    doc.text(`Nomor : ${refNum}`, 105, 51, { align: 'center' });
+
+    // Dasar
+    doc.text('Dasar', 15, 60);
+    doc.text(':', 55, 60);
+    const splitDasar = doc.splitTextToSize(data.dasar, 135);
+    doc.text(splitDasar, 58, 60);
+
+    const afterDasarY = 60 + (splitDasar.length * 5) + 3;
+
+    // Memerintahkan
+    doc.setFont('times', 'bold');
+    doc.setFontSize(11);
+    doc.text('MEMERINTAHKAN :', 105, afterDasarY, { align: 'center' });
+
+    // Kepada Saudara
+    const kpdY = afterDasarY + 7;
+    doc.setFont('times', 'normal');
+    doc.setFontSize(10);
+    doc.text('Kepada Saudara.', 15, kpdY);
+    doc.text(':', 55, kpdY);
+
+    doc.text('Nama', 15, kpdY + 6);
+    doc.text(':', 55, kpdY + 6);
+    doc.setFont('times', 'bold');
+    doc.text(data.name, 58, kpdY + 6);
+
+    doc.setFont('times', 'normal');
+    doc.text('NIP', 15, kpdY + 12);
+    doc.text(':', 55, kpdY + 12);
+    doc.text(data.nip, 58, kpdY + 12);
+
+    doc.text('Pangkat/Gol.Ruang', 15, kpdY + 18);
+    doc.text(':', 55, kpdY + 18);
+    doc.text(data.rank, 58, kpdY + 18);
+
+    doc.text('Jabatan', 15, kpdY + 24);
+    doc.text(':', 55, kpdY + 24);
+    doc.text(data.position, 58, kpdY + 24);
+
+    // Untuk
+    const untukY = kpdY + 33;
+    doc.text('Untuk', 15, untukY);
+    doc.text(':', 55, untukY);
+
+    const splitPurpose = doc.splitTextToSize(data.purpose, 135);
+    doc.text(splitPurpose, 58, untukY);
+
+    const detailsY = untukY + (splitPurpose.length * 5) + 3;
+
+    // Menjorok Rincian Waktu & Tempat
+    doc.text('Hari', 70, detailsY);
+    doc.text(':', 95, detailsY);
+    doc.text(data.day, 98, detailsY);
+
+    doc.text('Tanggal', 70, detailsY + 6);
+    doc.text(':', 95, detailsY + 6);
+    doc.text(data.dateStr, 98, detailsY + 6);
+
+    doc.text('Pukul', 70, detailsY + 12);
+    doc.text(':', 95, detailsY + 12);
+    doc.text(data.timeStr, 98, detailsY + 12);
+
+    doc.text('Tempat', 70, detailsY + 18);
+    doc.text(':', 95, detailsY + 18);
+    const splitLoc = doc.splitTextToSize(data.location, 95);
+    doc.text(splitLoc, 98, detailsY + 18);
+
+    const penutupY = detailsY + 18 + (splitLoc.length * 5) + 4;
+    doc.text('Demikian surat tugas ini dibuat untuk dilaksanakan dengan penuh tanggung jawab.', 15, penutupY);
+
+    // Tanda Tangan & QR
+    const sigY = Math.max(penutupY + 14, 215);
+
+    try {
+      const qrData = await generateLetterQRCode(letter);
+      doc.addImage(qrData, 'PNG', 20, sigY - 5, 22, 22);
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(2, 132, 199);
+      doc.text('VERIFIKASI RESMI', 20, sigY + 20);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100, 116, 139);
+      doc.text('SMPN 3 Kras Kediri', 20, sigY + 23.5);
+      doc.setTextColor(0, 0, 0);
+    } catch (e) {
+      console.error(e);
+    }
+
+    doc.setFont('times', 'normal');
+    doc.setFontSize(10);
+    doc.text(`Kras, ${formattedDocDate}`, 135, sigY);
+    doc.setFont('times', 'bold');
+    doc.text(headmaster.title, 135, sigY + 5);
+    doc.text(headmaster.name, 135, sigY + 24);
+    const hmWidth = doc.getTextWidth(headmaster.name);
+    doc.line(135, sigY + 25, 135 + hmWidth, sigY + 25);
+    doc.setFont('times', 'normal');
+    doc.text(headmaster.rank, 135, sigY + 29);
+    if (headmaster.nip) {
+      doc.text(`NIP. ${headmaster.nip}`, 135, sigY + 33);
+    }
+
+    // Catatan Footer
+    doc.setFontSize(8.5);
+    doc.setFont('times', 'normal');
+    doc.text('Catatan :', 15, 273);
+    doc.text('- Harap melaporkan hasil kegiatan kepada Pimpinan / Kepala Sekolah.', 15, 277.5);
+
+    if (saveDoc) {
+      const cleanRef = (refNum).replace(/[^a-zA-Z0-9]/g, '_');
+      doc.save(`Surat_Perintah_Tugas_${cleanRef}.pdf`);
+    }
+
+    return doc;
+  }
+
+  let officialTitle = 'SURAT DINAS RESMI';
+
+  if (templateType === 'wali_aktif' || templateType === 'aktif-belajar') {
+    officialTitle = 'SURAT KETERANGAN SISWA AKTIF BELAJAR';
+  } else if (templateType === 'guru_izin' || templateType === 'guru_cuti') {
+    officialTitle = 'SURAT KETERANGAN IZIN / CUTI PEGAWAI';
+  } else if (templateType === 'wali_pindah' || templateType === 'pindah-sekolah') {
+    officialTitle = 'SURAT KETERANGAN PINDAH SEKOLAH';
+  } else if (templateType === 'wali_kelakuan_baik' || templateType === 'kelakuan-baik') {
+    officialTitle = 'SURAT KETERANGAN BERKELAKUAN BAIK';
+  } else if (templateType === 'wali_dispensasi' || templateType === 'dispensasi-siswa') {
+    officialTitle = 'SURAT DISPENSASI SISWA';
+  } else if (templateType === 'guru_rekomendasi_lomba' || templateType === 'rekomendasi-beasiswa') {
+    officialTitle = 'SURAT REKOMENDASI';
+  } else if (letter.title) {
+    officialTitle = letter.title.toUpperCase();
+  }
+
+  doc.setFont('times', 'bold');
+  doc.setFontSize(12);
+  doc.text(officialTitle, 105, 45, { align: 'center' });
+  doc.line(45, 46.5, 165, 46.5);
+  doc.setFont('times', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Nomor: ${letter.referenceNumber || '421/DRAF/SMP.03/' + new Date().getFullYear()}`, 105, 51, { align: 'center' });
+
+  doc.text(`Yang bertanda tangan di bawah ini Kepala ${config.schoolName}, menerangkan dengan sesungguhnya bahwa:`, 15, 62);
+
+  const mainContent = letter.description || letter.title;
+  const splitContent = doc.splitTextToSize(mainContent, 180);
+  doc.text(splitContent, 15, 71);
+
+  const afterContentY = 71 + (splitContent.length * 5.5) + 6;
+
+  doc.text('Demikian surat dinas resmi ini kami buat untuk dapat dipergunakan sebagaimana mestinya.', 15, afterContentY);
+
+  // Signatures & QR
+  const sigY = Math.max(afterContentY + 16, 215);
+
+  try {
+    const qrData = await generateLetterQRCode(letter);
+    doc.addImage(qrData, 'PNG', 20, sigY - 5, 24, 24);
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(2, 132, 199);
+    doc.text('DIGITAL VERIFIED', 20, sigY + 23);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text('Validitas SMPN 3 Kras', 20, sigY + 26.5);
+    doc.setTextColor(0, 0, 0);
+  } catch (e) {
+    console.error(e);
+  }
+
+  doc.setFont('times', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Kediri, ${formattedDocDate}`, 135, sigY);
+  doc.text(`${headmaster.title}`, 135, sigY + 5);
+  doc.setFont('times', 'bold');
+  doc.text(headmaster.name, 135, sigY + 24);
+  doc.setFont('times', 'normal');
+  doc.text(headmaster.rank, 135, sigY + 28);
+  if (headmaster.nip) {
+    doc.text(`NIP. ${headmaster.nip}`, 135, sigY + 32);
+  }
+
+  if (saveDoc) {
+    const cleanRef = (letter.referenceNumber || officialTitle).replace(/[^a-zA-Z0-9]/g, '_');
+    doc.save(`Surat_Resmi_${cleanRef}.pdf`);
+  }
+
+  return doc;
+}
+
+/**
+ * 6. Generates and Downloads 2-Page PDF Package: Page 1 = Surat Permohonan, Page 2 = Surat Resmi Sekolah Sesuai Draf
+ */
+export async function generateCombinedDraftPDF(letter: Letter, cfg?: SchoolConfig, teachersList?: Teacher[]): Promise<void> {
+  const config = cfg || getSchoolConfig();
+  const doc = generateSuratPermohonanPDF(letter, config, false);
+  const headmaster = getHeadmasterDetails(teachersList, config);
+
+  // Add Page 2 for Surat Resmi
+  doc.addPage();
+  
+  // Kop Resmi on Page 2
+  drawPdfKopHeader(doc, config, false);
+
+  const formattedDocDate = letter.documentDate 
+    ? format(new Date(letter.documentDate), 'dd MMMM yyyy', { locale: id }) 
+    : format(new Date(letter.date), 'dd MMMM yyyy', { locale: id });
+
+  const templateType = letter.templateType || '';
+  const isSuratTugas = templateType === 'guru_tugas' || templateType === 'surat-tugas' || letter.title.toLowerCase().includes('tugas');
+
+  if (isSuratTugas) {
+    const data = parseSuratTugasData(letter, teachersList);
+    const refNum = letter.referenceNumber || `420.3/....../418.20.2.62.03/${new Date().getFullYear()}`;
+
+    // Title
+    doc.setFont('times', 'bold');
+    doc.setFontSize(12);
+    doc.text('SURAT PERINTAH TUGAS', 105, 45, { align: 'center' });
+    const titleWidth = doc.getTextWidth('SURAT PERINTAH TUGAS');
+    doc.line(105 - (titleWidth / 2), 46.2, 105 + (titleWidth / 2), 46.2);
+    doc.setFont('times', 'normal');
+    doc.setFontSize(10);
+    doc.text(`Nomor : ${refNum}`, 105, 51, { align: 'center' });
+
+    // Dasar
+    doc.text('Dasar', 15, 60);
+    doc.text(':', 55, 60);
+    const splitDasar = doc.splitTextToSize(data.dasar, 135);
+    doc.text(splitDasar, 58, 60);
+
+    const afterDasarY = 60 + (splitDasar.length * 5) + 3;
+
+    // Memerintahkan
+    doc.setFont('times', 'bold');
+    doc.setFontSize(11);
+    doc.text('MEMERINTAHKAN :', 105, afterDasarY, { align: 'center' });
+
+    // Kepada Saudara
+    const kpdY = afterDasarY + 7;
+    doc.setFont('times', 'normal');
+    doc.setFontSize(10);
+    doc.text('Kepada Saudara.', 15, kpdY);
+    doc.text(':', 55, kpdY);
+
+    doc.text('Nama', 15, kpdY + 6);
+    doc.text(':', 55, kpdY + 6);
+    doc.setFont('times', 'bold');
+    doc.text(data.name, 58, kpdY + 6);
+
+    doc.setFont('times', 'normal');
+    doc.text('NIP', 15, kpdY + 12);
+    doc.text(':', 55, kpdY + 12);
+    doc.text(data.nip, 58, kpdY + 12);
+
+    doc.text('Pangkat/Gol.Ruang', 15, kpdY + 18);
+    doc.text(':', 55, kpdY + 18);
+    doc.text(data.rank, 58, kpdY + 18);
+
+    doc.text('Jabatan', 15, kpdY + 24);
+    doc.text(':', 55, kpdY + 24);
+    doc.text(data.position, 58, kpdY + 24);
+
+    // Untuk
+    const untukY = kpdY + 33;
+    doc.text('Untuk', 15, untukY);
+    doc.text(':', 55, untukY);
+
+    const splitPurpose = doc.splitTextToSize(data.purpose, 135);
+    doc.text(splitPurpose, 58, untukY);
+
+    const detailsY = untukY + (splitPurpose.length * 5) + 3;
+
+    // Menjorok Rincian Waktu & Tempat
+    doc.text('Hari', 70, detailsY);
+    doc.text(':', 95, detailsY);
+    doc.text(data.day, 98, detailsY);
+
+    doc.text('Tanggal', 70, detailsY + 6);
+    doc.text(':', 95, detailsY + 6);
+    doc.text(data.dateStr, 98, detailsY + 6);
+
+    doc.text('Pukul', 70, detailsY + 12);
+    doc.text(':', 95, detailsY + 12);
+    doc.text(data.timeStr, 98, detailsY + 12);
+
+    doc.text('Tempat', 70, detailsY + 18);
+    doc.text(':', 95, detailsY + 18);
+    const splitLoc = doc.splitTextToSize(data.location, 95);
+    doc.text(splitLoc, 98, detailsY + 18);
+
+    const penutupY = detailsY + 18 + (splitLoc.length * 5) + 4;
+    doc.text('Demikian surat tugas ini dibuat untuk dilaksanakan dengan penuh tanggung jawab.', 15, penutupY);
+
+    // Tanda Tangan & QR
+    const sigY = Math.max(penutupY + 14, 215);
+
+    try {
+      const qrData = await generateLetterQRCode(letter);
+      doc.addImage(qrData, 'PNG', 20, sigY - 5, 22, 22);
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(2, 132, 199);
+      doc.text('VERIFIKASI RESMI', 20, sigY + 20);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(100, 116, 139);
+      doc.text('SMPN 3 Kras Kediri', 20, sigY + 23.5);
+      doc.setTextColor(0, 0, 0);
+    } catch (e) {
+      console.error(e);
+    }
+
+    doc.setFont('times', 'normal');
+    doc.setFontSize(10);
+    doc.text(`Kras, ${formattedDocDate}`, 135, sigY);
+    doc.setFont('times', 'bold');
+    doc.text(headmaster.title, 135, sigY + 5);
+    doc.text(headmaster.name, 135, sigY + 24);
+    const hmWidth = doc.getTextWidth(headmaster.name);
+    doc.line(135, sigY + 25, 135 + hmWidth, sigY + 25);
+    doc.setFont('times', 'normal');
+    doc.text(headmaster.rank, 135, sigY + 29);
+    if (headmaster.nip) {
+      doc.text(`NIP. ${headmaster.nip}`, 135, sigY + 33);
+    }
+
+    // Catatan Footer
+    doc.setFontSize(8.5);
+    doc.setFont('times', 'normal');
+    doc.text('Catatan :', 15, 273);
+    doc.text('- Harap melaporkan hasil kegiatan kepada Pimpinan / Kepala Sekolah.', 15, 277.5);
+
+    const cleanRef = (refNum).replace(/[^a-zA-Z0-9]/g, '_');
+    doc.save(`Paket_Lengkap_Surat_Tugas_${cleanRef}.pdf`);
+    return;
+  }
+
+  let officialTitle = 'SURAT DINAS RESMI';
+
+  if (templateType === 'wali_aktif' || templateType === 'aktif-belajar') {
+    officialTitle = 'SURAT KETERANGAN SISWA AKTIF BELAJAR';
+  } else if (templateType === 'guru_izin' || templateType === 'guru_cuti') {
+    officialTitle = 'SURAT KETERANGAN IZIN / CUTI PEGAWAI';
+  } else if (templateType === 'wali_pindah' || templateType === 'pindah-sekolah') {
+    officialTitle = 'SURAT KETERANGAN PINDAH SEKOLAH';
+  } else if (templateType === 'wali_kelakuan_baik' || templateType === 'kelakuan-baik') {
+    officialTitle = 'SURAT KETERANGAN BERKELAKUAN BAIK';
+  } else if (templateType === 'wali_dispensasi' || templateType === 'dispensasi-siswa') {
+    officialTitle = 'SURAT DISPENSASI SISWA';
+  } else if (templateType === 'guru_rekomendasi_lomba' || templateType === 'rekomendasi-beasiswa') {
+    officialTitle = 'SURAT REKOMENDASI';
+  } else if (letter.title) {
+    officialTitle = letter.title.toUpperCase();
+  }
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.text(officialTitle, 105, 45, { align: 'center' });
+  doc.line(45, 46.5, 165, 46.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Nomor: ${letter.referenceNumber || '421/DRAF/SMP.03/' + new Date().getFullYear()}`, 105, 51, { align: 'center' });
+
+  doc.text(`Yang bertanda tangan di bawah ini Kepala ${config.schoolName}, menerangkan dengan sesungguhnya bahwa:`, 15, 62);
+
+  const mainContent = letter.description || letter.title;
+  const splitContent = doc.splitTextToSize(mainContent, 180);
+  doc.text(splitContent, 15, 71);
+
+  const afterContentY = 71 + (splitContent.length * 5.5) + 6;
+  doc.text('Demikian surat dinas resmi ini kami buat untuk dapat dipergunakan sebagaimana mestinya.', 15, afterContentY);
+
+  const sigY = Math.max(afterContentY + 16, 215);
+
+  try {
+    const qrData = await generateLetterQRCode(letter);
+    doc.addImage(qrData, 'PNG', 20, sigY - 5, 24, 24);
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(2, 132, 199);
+    doc.text('DIGITAL VERIFIED', 20, sigY + 23);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text('Validitas SMPN 3 Kras', 20, sigY + 26.5);
+    doc.setTextColor(0, 0, 0);
+  } catch (e) {
+    console.error(e);
+  }
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Kediri, ${formattedDocDate}`, 135, sigY);
+  doc.text(`Kepala ${config.schoolName},`, 135, sigY + 5);
+  doc.setFont('helvetica', 'bold');
+  doc.text(config.headmaster, 135, sigY + 24);
+  doc.setFont('helvetica', 'normal');
+  if (config.headmasterNip) {
+    doc.text(`NIP. ${config.headmasterNip}`, 135, sigY + 28);
+  }
+
+  const cleanTitle = (letter.title || 'Paket_Draf_Lengkap').replace(/[^a-zA-Z0-9]/g, '_');
+  doc.save(`Paket_Lengkap_Permohonan_dan_Surat_Resmi_${cleanTitle}.pdf`);
 }
 
