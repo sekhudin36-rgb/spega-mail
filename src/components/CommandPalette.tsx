@@ -16,7 +16,8 @@ import {
   FileText,
   ShieldCheck,
   Zap,
-  Activity
+  Activity,
+  Sparkles
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../lib/db';
@@ -181,14 +182,21 @@ export default function CommandPalette({ isOpen, onClose }: CommandPaletteProps)
                   </button>
                 </div>
 
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-2 mt-4 mb-2">Halaman Utama & Audit</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-2 mt-4 mb-2">Halaman Utama & Portal</p>
                 <div className="grid grid-cols-3 gap-1.5">
                   <button
-                    onClick={() => handleNavigate('/')}
+                    onClick={() => handleNavigate('/admin')}
                     className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs bg-slate-800/30 hover:bg-slate-800 text-slate-300 transition-colors"
                   >
                     <Zap className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>Dashboard Utama</span>
+                    <span>Dashboard Admin (Portal 2)</span>
+                  </button>
+                  <button
+                    onClick={() => handleNavigate('/')}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs bg-emerald-950/30 hover:bg-emerald-900/40 text-emerald-300 border border-emerald-500/20 transition-colors"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Portal 1 (Guru & Wali)</span>
                   </button>
                   <button
                     onClick={() => handleNavigate('/teachers')}

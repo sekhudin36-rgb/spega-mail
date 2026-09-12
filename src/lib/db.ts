@@ -57,6 +57,15 @@ export interface Letter {
   isDraft?: boolean;
   templateType?: string;
   templatePayload?: string;
+  // Google Drive Integration & Legalisir Ijazah Fields
+  driveFileUrl?: string;
+  driveFileId?: string;
+  ijazahNumber?: string;
+  graduationYear?: string;
+  graduationDate?: string;
+  birthPlaceDate?: string;
+  parentName?: string;
+  sheetCount?: number | string;
   // Fields for Teacher/Parent (Guru / Wali) submissions
   applicantName?: string;
   applicantPhone?: string;
@@ -64,6 +73,7 @@ export interface Letter {
   source?: 'admin' | 'portal_guru_wali';
   submissionStatus?: 'pending_approval' | 'approved' | 'rejected';
   adminNotes?: string;
+  isAgendaOnly?: boolean;
 }
 
 export interface Archive {

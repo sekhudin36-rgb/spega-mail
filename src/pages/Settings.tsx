@@ -24,7 +24,10 @@ import {
   Image as ImageIcon,
   RotateCcw,
   Eye,
-  Layers
+  EyeOff,
+  KeyRound,
+  Layers,
+  FileDown
 } from 'lucide-react';
 import { db } from '../lib/db';
 import { cn } from '../lib/utils';
@@ -45,6 +48,9 @@ import {
   setAutoSyncEnabled
 } from '../lib/googleDrive';
 import GoogleDriveModal from '../components/GoogleDriveModal';
+import AdminPinModal from '../components/AdminPinModal';
+import { generateFullUserManualPdf } from '../lib/pdfGuideHelper';
+import { getAdminPin, setAdminPin, isPinRequired, setPinRequired } from '../lib/authHelper';
 import toast from 'react-hot-toast';
 
 const THEME_MODES = [
@@ -185,8 +191,10 @@ export default function Settings() {
   const [notifySystem, setNotifySystem] = useState(true);
 
   // Security State
-  const [requirePin, setRequirePin] = useState(false);
-  const [pin, setPin] = useState('');
+  const [requirePin, setRequirePin] = useState(true);
+  const [pin, setPin] = useState('1234');
+  const [showPin, setShowPin] = useState(false);
+  const [isTestingPinModalOpen, setIsTestingPinModalOpen] = useState(false);
 
   // Theme State
   const [themeColorRgb, setThemeColorRgb] = useState('14, 165, 233');
@@ -242,8 +250,8 @@ export default function Settings() {
     setNotifyInbox(localStorage.getItem('notifyInbox') !== 'false');
     setNotifySystem(localStorage.getItem('notifySystem') !== 'false');
     
-    setRequirePin(localStorage.getItem('requirePin') === 'true');
-    setPin(localStorage.getItem('pin') || '');
+    setRequirePin(isPinRequired());
+    setPin(getAdminPin());
 
     setAdminUsername(localStorage.getItem('adminUsername') || 'admin');
     setAdminPassword('');
@@ -520,13 +528,17 @@ export default function Settings() {
 
   const handleSaveSecurity = (e: React.FormEvent) => {
     e.preventDefault();
-    localStorage.setItem('requirePin', String(requirePin));
-    localStorage.setItem('pin', pin);
+    setPinRequired(requirePin);
+    const finalPin = pin && pin.trim() ? pin.trim() : '1234';
+    setAdminPin(finalPin);
+    setPin(finalPin);
+    
     localStorage.setItem('adminUsername', adminUsername);
     if (adminPassword && adminPassword.trim() !== '') {
       localStorage.setItem('adminPassword', adminPassword);
       setAdminPassword(''); // reset input after saving
     }
+    toast.success('Pengaturan Keamanan & PIN Admin berhasil disimpan!');
     showSavedMessage();
   };
 
@@ -666,6 +678,29 @@ export default function Settings() {
               <span className="font-medium text-sm">{tab.label}</span>
             </button>
           ))}
+
+          {/* Buku Panduan PDF Card */}
+          <div className="pt-4 mt-4 border-t border-white/10">
+            <div className="p-4 rounded-xl bg-gradient-to-br from-indigo-950/50 to-slate-900 border border-indigo-500/30 space-y-2.5 shadow-md">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-indigo-500/20 text-indigo-400">
+                  <FileDown className="w-4 h-4" />
+                </div>
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider">Buku Panduan PDF</h4>
+              </div>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                Dokumen resmi petunjuk teknis operasional aplikasi menyeluruh untuk Admin TU, Guru, dan Wali Murid.
+              </p>
+              <button
+                type="button"
+                onClick={generateFullUserManualPdf}
+                className="w-full py-2 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-indigo-900/30"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Unduh Panduan (PDF)</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Right Column - Content */}
@@ -1419,81 +1454,180 @@ export default function Settings() {
               </motion.div>
             )}
 
-            {/* TAB: KEAMANAN */}
+            {/* TAB: KEAMANAN & AKSES PIN ADMIN */}
             {activeTab === 'security' && (
               <motion.div 
                 key="security"
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-                className="glass-panel p-6"
+                className="glass-panel p-6 space-y-6"
               >
-                <h3 className="text-xl font-medium text-white mb-6 flex items-center gap-2">
-                  <ShieldCheck className="w-5 h-5 text-sky-400" style={{ color: 'var(--accent-text)' }} />
-                  Keamanan & Akses
-                </h3>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
+                  <div>
+                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                      <ShieldCheck className="w-5 h-5 text-sky-400" style={{ color: 'var(--accent-text)' }} />
+                      Keamanan & PIN Akses Portal Admin
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Atur PIN otorisasi khusus untuk masuk ke dasbor Admin Tata Usaha dari Portal Pengajuan Surat Guru & Wali Murid.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsTestingPinModalOpen(true)}
+                    className="px-3.5 py-2 rounded-xl bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 hover:text-white border border-indigo-500/40 text-xs font-bold transition-all flex items-center gap-2 shrink-0 shadow-sm"
+                  >
+                    <KeyRound className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Uji Coba PIN Sekarang</span>
+                  </button>
+                </div>
+
                 <form onSubmit={handleSaveSecurity} className="space-y-6">
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white/5 p-4 rounded-xl border border-white/10 mb-6">
-                    <div className="space-y-1">
-                      <label className="text-xs font-medium text-slate-400 uppercase">Username Login</label>
-                      <input 
-                        type="text" 
-                        value={adminUsername}
-                        onChange={(e) => setAdminUsername(e.target.value)}
-                        className="glass-input w-full"
-                        required
-                        placeholder="admin"
-                      />
+                  {/* CARD 1: PENGATURAN PIN PORTAL ADMIN */}
+                  <div className="p-5 rounded-2xl bg-gradient-to-br from-indigo-950/40 via-slate-900/60 to-slate-900/80 border border-indigo-500/30 space-y-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2.5 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 shrink-0 mt-0.5">
+                          <KeyRound className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-bold text-white">PIN Akses Khusus Portal Admin</h4>
+                            <span className={cn(
+                              "text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border",
+                              requirePin ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" : "bg-slate-700/50 text-slate-400 border-slate-600"
+                            )}>
+                              {requirePin ? 'PIN Wajib Aktif' : 'PIN Opsional'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                            Petugas Tata Usaha atau Kepala Sekolah dapat langsung masuk ke dasbor utama cukup dengan mengetikkan <b>PIN 4-6 digit</b> ini tanpa perlu mengetik ulang username & kata sandi panjang.
+                          </p>
+                        </div>
+                      </div>
+
+                      <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                        <input 
+                          type="checkbox" 
+                          className="sr-only peer" 
+                          checked={requirePin} 
+                          onChange={(e) => setRequirePin(e.target.checked)} 
+                        />
+                        <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                      </label>
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-xs font-medium text-slate-400 uppercase">Kata Sandi Baru</label>
-                      <input 
-                        type="password" 
-                        value={adminPassword}
-                        onChange={(e) => setAdminPassword(e.target.value)}
-                        className="glass-input w-full"
-                        placeholder="Kosongkan jika tidak ingin mengubah"
-                      />
-                      <p className="text-[10px] text-slate-500 mt-1">Kosongkan jika tidak ingin mengubah sandi lama.</p>
+
+                    <div className="pt-2">
+                      <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block mb-2">
+                        Nomor PIN Admin Saat Ini (4 - 6 Digit Angka)
+                      </label>
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        <div className="relative w-full sm:w-64">
+                          <input 
+                            type={showPin ? "text" : "password"} 
+                            value={pin} 
+                            onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))} 
+                            className="glass-input w-full pr-10 text-base font-mono tracking-widest font-bold text-center bg-slate-900/90 border-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" 
+                            placeholder="1234"
+                            maxLength={6}
+                            required
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPin(!showPin)}
+                            className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-white"
+                            title={showPin ? "Sembunyikan PIN" : "Perlihatkan PIN"}
+                          >
+                            {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const randomPin = Math.floor(1000 + Math.random() * 9000).toString();
+                            setPin(randomPin);
+                            setShowPin(true);
+                            toast.success(`PIN baru di-generate: ${randomPin}. Klik Simpan untuk menerapkan.`);
+                          }}
+                          className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-medium transition-colors flex items-center gap-1.5"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Acak 4 Digit</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPin('1234');
+                            setShowPin(true);
+                            toast.success('PIN direset ke default: 1234');
+                          }}
+                          className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 border border-slate-700 text-xs font-medium transition-colors flex items-center gap-1.5"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Reset ke 1234</span>
+                        </button>
+                      </div>
+
+                      <div className="mt-3 text-[11px] text-slate-400 flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                        <span>PIN standar sekolah bawaan sistem: <b className="text-slate-200 font-mono">1234</b>. Digunakan pada tombol <b>"🔐 Portal Admin TU"</b> di pojok atas Portal Pengajuan Surat.</span>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between p-4 rounded-lg bg-white/5 border border-white/10">
-                    <div>
-                      <h4 className="text-sm font-medium text-white">Kunci Aplikasi dengan PIN</h4>
-                      <p className="text-xs text-slate-400 mt-1">Minta PIN saat membuka aplikasi</p>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input type="checkbox" className="sr-only peer" checked={requirePin} onChange={(e) => setRequirePin(e.target.checked)} />
-                      <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sky-500" style={{ backgroundColor: requirePin ? 'var(--accent-text)' : undefined }}></div>
-                    </label>
-                  </div>
-                  
-                  <AnimatePresence>
-                    {requirePin && (
-                      <motion.div 
-                        initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
-                        className="space-y-1 overflow-hidden"
-                      >
-                        <label className="text-xs font-medium text-slate-400 uppercase">Atur PIN (4-6 Digit)</label>
+                  {/* CARD 2: KREDENSIAL AKUN UTAMA ADMIN */}
+                  <div className="p-5 rounded-2xl bg-white/5 border border-white/10 space-y-4">
+                    <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-sky-400" />
+                      Kredensial Login Akun Alternatif (Username & Kata Sandi)
+                    </h4>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      Kredensial ini digunakan jika Anda memilih login akun standar di halaman login utama.
+                    </p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Username Login Admin</label>
+                        <input 
+                          type="text" 
+                          value={adminUsername}
+                          onChange={(e) => setAdminUsername(e.target.value)}
+                          className="glass-input w-full"
+                          required
+                          placeholder="admin"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Ganti Kata Sandi Baru</label>
                         <input 
                           type="password" 
-                          value={pin} 
-                          onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))} 
-                          className="glass-input w-full max-w-xs block" 
-                          placeholder="••••"
-                          required={requirePin}
+                          value={adminPassword}
+                          onChange={(e) => setAdminPassword(e.target.value)}
+                          className="glass-input w-full"
+                          placeholder="Kosongkan jika tidak ingin mengubah"
                         />
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                        <p className="text-[10px] text-slate-500 mt-1">Kosongkan jika tetap ingin memakai sandi saat ini.</p>
+                      </div>
+                    </div>
+                  </div>
 
                   <div className="pt-4 border-t border-white/10 flex items-center justify-between">
                     <div>{isSaved && <SavedMessage />}</div>
-                    <button type="submit" className="glass-button flex items-center gap-2">
-                      <Save className="w-4 h-4" /> Simpan Perubahan
+                    <button type="submit" className="glass-button flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold">
+                      <Save className="w-4 h-4" /> Simpan Pengaturan PIN & Keamanan
                     </button>
                   </div>
                 </form>
+
+                {/* Modal Uji Coba PIN */}
+                <AdminPinModal
+                  isOpen={isTestingPinModalOpen}
+                  onClose={() => setIsTestingPinModalOpen(false)}
+                  isTestMode={true}
+                  title="Uji Coba PIN Keamanan Admin"
+                  subtitle="Ketikkan PIN yang Anda simpan untuk memverifikasi apakah PIN berfungsi dengan benar."
+                />
               </motion.div>
             )}
 

@@ -24,7 +24,7 @@ function AdminProtectedRoute({ children }: { children: React.ReactNode }) {
 
   const isGuest = sessionStorage.getItem('isGuestAuthenticated') === 'true' || userRole === 'guru_wali';
   if (isGuest) {
-    return <Navigate to="/portal-guru-wali" replace />;
+    return <Navigate to="/" replace />;
   }
 
   return <Navigate to="/login" replace />;
@@ -71,11 +71,19 @@ export default function App() {
     <ConfirmProvider>
       <HashRouter>
         <Routes>
-          <Route path="/login" element={<Login />} />
+          {/* PORTAL 1: Layanan Draf Surat Guru & Wali Murid (Halaman Utama saat web dibuka) */}
+          <Route path="/" element={<PortalGuruWali />} />
+          <Route path="/portal-1" element={<PortalGuruWali />} />
           <Route path="/portal-guru-wali" element={<PortalGuruWali />} />
           <Route path="/ajukan-surat" element={<PortalGuruWali />} />
-          <Route path="/" element={<AdminProtectedRoute><Layout /></AdminProtectedRoute>}>
+
+          {/* Autentikasi / Login */}
+          <Route path="/login" element={<Login />} />
+
+          {/* PORTAL 2: Admin Tata Usaha & Kearsipan (Akses PIN / Akun Petugas TU) */}
+          <Route path="/admin" element={<AdminProtectedRoute><Layout /></AdminProtectedRoute>}>
             <Route index element={<Dashboard />} />
+            <Route path="dashboard" element={<Dashboard />} />
             <Route path="letters" element={<Letters />} />
             <Route path="archives" element={<Archives />} />
             <Route path="teachers" element={<Teachers />} />
@@ -84,7 +92,20 @@ export default function App() {
             <Route path="logs" element={<SystemLogs />} />
             <Route path="settings" element={<Settings />} />
           </Route>
-          <Route path="*" element={<Navigate to="/login" replace />} />
+
+          {/* Direct module routes with layout protection */}
+          <Route element={<AdminProtectedRoute><Layout /></AdminProtectedRoute>}>
+            <Route path="/letters" element={<Letters />} />
+            <Route path="/archives" element={<Archives />} />
+            <Route path="/teachers" element={<Teachers />} />
+            <Route path="/students" element={<Students />} />
+            <Route path="/reports" element={<Reports />} />
+            <Route path="/logs" element={<SystemLogs />} />
+            <Route path="/settings" element={<Settings />} />
+          </Route>
+
+          {/* Default fallback: Kembali ke Portal 1 */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </HashRouter>
     </ConfirmProvider>

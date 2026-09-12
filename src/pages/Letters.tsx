@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, type Letter, COMMON_LETTER_CODES, seedCompleteSchoolData } from '../lib/db';
-import { Search, Plus, Archive, X, FileText, ArrowDownRight, ArrowUpRight, Download, Upload, Printer, FileSpreadsheet, FileIcon, Bookmark, ClipboardCheck, Edit, Trash, Trash2, Eye, Filter, Sparkles, QrCode as QrCodeIcon, CheckCircle2, Cloud, Database, AlertCircle, ShieldCheck, MessageCircle, Users, Briefcase, Phone, Layers, Hash } from 'lucide-react';
+import { Search, Plus, Archive, X, FileText, ArrowDownRight, ArrowUpRight, Download, Upload, Printer, FileSpreadsheet, FileIcon, Bookmark, ClipboardCheck, Edit, Trash, Trash2, Eye, Filter, Sparkles, QrCode as QrCodeIcon, CheckCircle2, Cloud, Database, AlertCircle, ShieldCheck, MessageCircle, Users, Briefcase, Phone, Layers, Hash, Tag, Palette } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
@@ -15,6 +15,8 @@ import { useConfirm } from '../components/ConfirmProvider';
 import LetterTemplateWizard from '../components/LetterTemplateWizard';
 import GoogleDriveModal from '../components/GoogleDriveModal';
 import PrintPreviewModal from '../components/PrintPreviewModal';
+import QuickAgendaModal from '../components/QuickAgendaModal';
+import CanvaPosterModal from '../components/CanvaPosterModal';
 import { 
   getSchoolConfig, 
   generateDisposisiHTML, 
@@ -29,8 +31,14 @@ import {
   generateCombinedDraftHTML,
   generateSuratPermohonanPDF,
   generateSuratDinasResmiPDF,
-  generateCombinedDraftPDF
+  generateCombinedDraftPDF,
+  generateAgendaSlipHTML
 } from '../lib/printHelper';
+import { 
+  getLatestAgendaInfo, 
+  getTemplateClassification, 
+  buildOfficialLetterNumber 
+} from '../lib/agendaHelper';
 import { isAutoSyncEnabled, getGoogleAccessToken, uploadLetterToGoogleDrive } from '../lib/googleDrive';
 
 const LETTER_CATEGORIES = [
@@ -115,32 +123,56 @@ export default function Letters() {
 
   const rawLetters = useLiveQuery(() => db.letters.toArray()) || [];
   const teachers = useLiveQuery(() => db.teachers.toArray()) || [];
+  const [isQuickAgendaModalOpen, setIsQuickAgendaModalOpen] = useState(false);
+  const [isCanvaModalOpen, setIsCanvaModalOpen] = useState(false);
+
+  // Hitung nomor urut agenda surat keluar terakhir & berikutnya secara otomatis
+  const outboxAgenda = getLatestAgendaInfo(rawLetters, 'outbox');
+
+  const handlePrintAgendaSlipDirect = (letter: Letter) => {
+    const slipHtml = generateAgendaSlipHTML(letter);
+    const win = window.open('', '_blank');
+    if (win) {
+      win.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Bukti Registrasi Nomor Agenda - ${letter.referenceNumber}</title>
+            <style>
+              body { margin: 0; padding: 20px; font-family: 'Times New Roman', Times, serif; }
+              @media print {
+                body { padding: 0; }
+                @page { margin: 1.5cm; }
+              }
+            </style>
+          </head>
+          <body>
+            ${slipHtml}
+            <script>
+              window.onload = function() {
+                window.print();
+              };
+            </script>
+          </body>
+        </html>
+      `);
+      win.document.close();
+    }
+  };
 
   const getNextSequenceNumber = (type: 'inbox' | 'outbox') => {
-    const currentYear = new Date().getFullYear().toString();
-    const filtered = rawLetters.filter(l => l.type === type && l.date && new Date(l.date).getFullYear().toString() === currentYear);
-    const numbers = filtered
-      .map(l => parseInt(l.sequenceNumber || '', 10))
-      .filter(n => !isNaN(n));
-    const max = numbers.length > 0 ? Math.max(...numbers) : 0;
-    return String(max + 1).padStart(3, '0');
+    return getLatestAgendaInfo(rawLetters, type).formattedNext;
   };
 
   const handleOpenNumberAssignModal = (letter: Letter, autoPrint: boolean = true) => {
-    const currentYear = new Date().getFullYear().toString();
-    const nextSeq = getNextSequenceNumber('outbox');
-    const isSuratTugas = letter.templateType === 'guru_tugas' || letter.templateType === 'surat-tugas' || letter.title.toLowerCase().includes('tugas');
-    const isSiswaAktif = letter.templateType === 'wali_aktif' || letter.templateType === 'aktif-belajar' || letter.title.toLowerCase().includes('aktif');
+    const currentYear = new Date().getFullYear();
+    const agendaInfo = getLatestAgendaInfo(rawLetters, 'outbox');
+    const nextSeq = agendaInfo.formattedNext;
+    const templateConfig = getTemplateClassification(letter.templateType || '');
 
     let initialRef = letter.referenceNumber || '';
     if (!initialRef || initialRef.includes('DRAF') || initialRef.includes('....') || initialRef.includes('421/DRAF/')) {
-      if (isSuratTugas) {
-        initialRef = `420.3/${nextSeq}/418.20.2.62.03/${currentYear}`;
-      } else if (isSiswaAktif) {
-        initialRef = `421/${nextSeq}/SMP.03/${currentYear}`;
-      } else {
-        initialRef = `420.3/${nextSeq}/418.20.2.62.03/${currentYear}`;
-      }
+      initialRef = buildOfficialLetterNumber(templateConfig.code, nextSeq, templateConfig.instansiCode, currentYear);
     }
 
     setNumberAssignModal({
@@ -164,8 +196,16 @@ export default function Letters() {
 
     try {
       const targetLetter = numberAssignModal.letter;
+      let extractedSeq = '';
+      const match = finalNumber.match(/\/(?:DRAF-)?(\d{1,4})\//);
+      if (match && match[1]) {
+        extractedSeq = match[1];
+      }
+
       const updatedData: Partial<Letter> = {
         referenceNumber: finalNumber,
+        sequenceNumber: extractedSeq || targetLetter.sequenceNumber || outboxAgenda.formattedNext,
+        code: finalNumber.split('/')[0] || targetLetter.code || '420.3',
         documentDate: numberAssignModal.newDocumentDate,
         date: numberAssignModal.newDocumentDate,
         submissionStatus: numberAssignModal.autoApprove ? 'approved' : targetLetter.submissionStatus,
@@ -204,9 +244,19 @@ export default function Letters() {
         });
       }
 
+      // Catat di System Logs
+      await db.systemLogs.add({
+        timestamp: new Date().toISOString(),
+        action: 'Penetapan Nomor Surat',
+        category: 'Persuratan',
+        level: 'info',
+        user: 'Admin Tata Usaha',
+        details: `Nomor surat '${targetLetter.title}' resmi ditetapkan menjadi ${finalNumber} (Agenda #${updatedData.sequenceNumber}).`
+      });
+
       setNumberAssignModal(prev => ({ ...prev, isOpen: false, letter: null }));
       confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
-      toast.success(`Nomor surat resmi "${finalNumber}" berhasil ditetapkan & disetujui!`);
+      toast.success(`Nomor surat resmi "${finalNumber}" (Agenda #${updatedData.sequenceNumber}) berhasil ditetapkan & disetujui!`);
 
       if (numberAssignModal.autoPrint) {
         await handlePreviewOfficialLetter(updatedLetter, 'resmi');
@@ -214,6 +264,63 @@ export default function Letters() {
     } catch (err) {
       console.error(err);
       toast.error('Gagal menetapkan nomor surat');
+    }
+  };
+
+  const handleBatchRegisterPendingSubmissions = async () => {
+    const pendingSubmissions = rawLetters.filter(l => 
+      (l.source === 'portal_guru_wali' || Boolean(l.applicantName)) && 
+      l.submissionStatus === 'pending_approval'
+    ).sort((a, b) => new Date(a.createdAt || a.date).getTime() - new Date(b.createdAt || b.date).getTime());
+
+    if (pendingSubmissions.length === 0) {
+      toast('Tidak ada permohonan surat guru/wali yang berstatus pending.', { icon: 'ℹ️' });
+      return;
+    }
+
+    try {
+      const currentYear = new Date().getFullYear();
+      let currentSeqNumber = outboxAgenda.nextSeq;
+      let count = 0;
+
+      for (const letter of pendingSubmissions) {
+        if (!letter.id) continue;
+        const seqStr = String(currentSeqNumber).padStart(3, '0');
+        const cls = getTemplateClassification(letter.templateType || '');
+        
+        let officialRef = letter.referenceNumber;
+        if (!officialRef || officialRef.includes('DRAF') || !officialRef.includes('/')) {
+          officialRef = buildOfficialLetterNumber(cls.code, seqStr, cls.instansiCode, currentYear);
+        }
+
+        await db.letters.update(letter.id, {
+          referenceNumber: officialRef,
+          sequenceNumber: seqStr,
+          code: officialRef.split('/')[0] || cls.code,
+          submissionStatus: 'approved',
+          isDraft: false,
+          status: 'active'
+        });
+
+        // Log ke Riwayat Sistem
+        await db.systemLogs.add({
+          timestamp: new Date().toISOString(),
+          action: 'Persetujuan & Registrasi Agenda',
+          category: 'Persuratan',
+          level: 'info',
+          user: 'Admin Tata Usaha',
+          details: `Pengajuan '${letter.title}' dari ${letter.applicantName} disetujui & diregistrasi dengan No. Agenda #${seqStr} (${officialRef}).`
+        });
+
+        currentSeqNumber++;
+        count++;
+      }
+
+      confetti({ particleCount: 80, spread: 90, origin: { y: 0.6 } });
+      toast.success(`Berhasil meregistrasi nomor agenda otomatis & menerbitkan ${count} permohonan surat!`, { duration: 6000 });
+    } catch (err) {
+      console.error(err);
+      toast.error('Gagal meregistrasi agenda otomatis');
     }
   };
   
@@ -1384,6 +1491,78 @@ export default function Letters() {
         </div>
       </div>
 
+      {/* BANNER REGISTRASI NOMOR AGENDA SURAT OTOMATIS */}
+      <div className="p-4 rounded-xl bg-gradient-to-r from-[#0B152B] via-[#0F1B38] to-[#0A1326] border border-sky-500/30 shadow-lg print:hidden">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-sky-500/20 border border-sky-500/40 text-sky-400 flex items-center justify-center font-bold shrink-0 shadow-md shadow-sky-500/20">
+              <Hash className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className="text-sm font-bold text-white tracking-wide">Registrasi Nomor Agenda Surat Keluar Otomatis</h4>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Aktif Berkelanjutan
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Nomor agenda surat keluar otomatis meneruskan urutan nomor register terakhir di buku agenda sekolah.
+              </p>
+            </div>
+          </div>
+
+          {/* Kartu Status Nomor Agenda Sebelumnya & Berikutnya */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-700/70">
+              <span className="text-[10px] text-slate-400 font-medium">Agenda Sebelumnya:</span>
+              <span className="text-xs font-mono font-bold text-amber-300 bg-amber-500/15 px-1.5 py-0.5 rounded border border-amber-500/30">
+                #{outboxAgenda.formattedLast}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-sky-950/60 border border-sky-500/40">
+              <span className="text-[10px] text-sky-300 font-medium">Agenda Berikutnya:</span>
+              <span className="text-xs font-mono font-bold text-sky-200 bg-sky-500/25 px-1.5 py-0.5 rounded border border-sky-500/40 animate-pulse">
+                #{outboxAgenda.formattedNext}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsQuickAgendaModalOpen(true)}
+              className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 shadow-md shadow-amber-500/20 transition-all"
+              title="Keluarkan nomor agenda keluar resmi secara langsung untuk guru yang meminta nomor"
+            >
+              <Tag className="w-3.5 h-3.5 text-slate-950" />
+              <span>Beri No. Agenda Guru</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsCanvaModalOpen(true)}
+              className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-all shadow-sm"
+              title="Lihat desain poster panduan guru & kit Canva untuk dicetak di mading TU"
+            >
+              <Palette className="w-3.5 h-3.5 text-amber-400" />
+              <span>Poster Panduan Canva</span>
+            </button>
+
+            {/* Tombol Batch Registrasi jika ada pengajuan pending */}
+            {rawLetters.filter(l => (l.source === 'portal_guru_wali' || Boolean(l.applicantName)) && l.submissionStatus === 'pending_approval').length > 0 && (
+              <button
+                type="button"
+                onClick={handleBatchRegisterPendingSubmissions}
+                className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/30 transition-all"
+                title="Registrasi Nomor Agenda Otomatis & Terbitkan Semua Pengajuan Guru/Wali yang Pending"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                <span>Registrasi Otomatis ({rawLetters.filter(l => (l.source === 'portal_guru_wali' || Boolean(l.applicantName)) && l.submissionStatus === 'pending_approval').length})</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div className="glass-panel p-4 flex flex-col gap-4 print:hidden">
         <div className="flex flex-col sm:flex-row gap-4 justify-between items-center w-full">
           <div className="relative w-full sm:w-96">
@@ -1578,6 +1757,11 @@ export default function Letters() {
                             <Sparkles className="w-2.5 h-2.5 text-amber-400" /> Draf
                           </span>
                         )}
+                        {letter.isAgendaOnly && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                            <Tag className="w-2.5 h-2.5 text-amber-400" /> Agenda Saja
+                          </span>
+                        )}
                       </div>
                       {letter.code && (
                         <div className="text-[11px] font-mono text-slate-400">
@@ -1692,6 +1876,17 @@ export default function Letters() {
                           >
                             <MessageCircle className="w-4 h-4" />
                           </a>
+                        )}
+
+                        {/* Cetak Bukti / Slip Registrasi Nomor Agenda Khusus Guru */}
+                        {letter.isAgendaOnly && (
+                          <button 
+                            onClick={() => handlePrintAgendaSlipDirect(letter)}
+                            className="p-2 rounded-lg hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 transition-colors"
+                            title="Cetak Bukti / Slip Registrasi Nomor Agenda Guru"
+                          >
+                            <Printer className="w-4 h-4 text-amber-400" />
+                          </button>
                         )}
 
                         {/* Cetak Surat Resmi Langsung oleh Admin */}
@@ -2458,7 +2653,7 @@ export default function Letters() {
               </div>
 
               <form onSubmit={handleSaveAssignedNumber} className="p-6 space-y-4">
-                <div className="p-3.5 rounded-xl bg-slate-800/60 border border-slate-700/60 space-y-1.5">
+                <div className="p-3.5 rounded-xl bg-slate-800/60 border border-slate-700/60 space-y-2">
                   <div className="text-xs text-slate-400 font-mono">DRAF / PERIHAL SURAT:</div>
                   <div className="text-sm font-semibold text-white">{numberAssignModal.letter.title}</div>
                   {numberAssignModal.letter.applicantName && (
@@ -2468,71 +2663,124 @@ export default function Letters() {
                       <span>({numberAssignModal.letter.applicantRole === 'guru' ? 'Guru' : 'Wali Murid'})</span>
                     </div>
                   )}
+
+                  {/* Visual Urutan Agenda Sebelumnya -> Agenda Baru */}
+                  <div className="pt-2 border-t border-slate-700/60 grid grid-cols-2 gap-2 text-[11px]">
+                    <div className="p-2 rounded-lg bg-slate-900/80 border border-slate-700/70">
+                      <span className="text-slate-400 block text-[10px]">Agenda Sebelumnya:</span>
+                      <span className="font-mono font-bold text-amber-300">#{outboxAgenda.formattedLast}</span>
+                      <span className="text-[10px] text-slate-400 block truncate">{outboxAgenda.lastLetter?.referenceNumber || '-'}</span>
+                    </div>
+                    <div className="p-2 rounded-lg bg-sky-950/60 border border-sky-500/40">
+                      <span className="text-sky-300 block text-[10px]">Agenda Baru Otomatis:</span>
+                      <span className="font-mono font-bold text-sky-200">#{outboxAgenda.formattedNext}</span>
+                      <span className="text-[10px] text-emerald-300 block">✓ Meneruskan urutan</span>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
                     <span>NOMOR SURAT RESMI (DIISI OLEH ADMIN / TU) *</span>
-                    <span className="text-[10px] text-amber-400 font-mono">Standar Kode Sekolah</span>
+                    <span className="text-[10px] text-sky-400 font-mono">Agenda #{outboxAgenda.formattedNext}</span>
                   </label>
                   <input
                     type="text"
                     required
                     value={numberAssignModal.newRefNumber}
                     onChange={(e) => setNumberAssignModal(prev => ({ ...prev, newRefNumber: e.target.value }))}
-                    placeholder="Contoh: 420.3/024/418.20.2.62.03/2026"
-                    className="glass-input w-full font-mono text-sm text-sky-300 font-bold border-amber-500/40 focus:border-amber-400"
+                    placeholder={`Contoh: 420.3/${outboxAgenda.formattedNext}/418.20.2.62.03/${new Date().getFullYear()}`}
+                    className="glass-input w-full font-mono text-sm text-sky-300 font-bold border-sky-500/40 focus:border-sky-400"
                   />
                 </div>
 
                 {/* Preset Cepat Format Nomor Surat */}
                 <div className="space-y-1.5">
-                  <div className="text-[11px] font-medium text-slate-400">Pilih Preset Format Nomor Standar:</div>
+                  <div className="text-[11px] font-medium text-slate-400">Pilih Preset Format Nomor Standar (No. Agenda #{outboxAgenda.formattedNext}):</div>
                   <div className="flex flex-wrap gap-1.5">
                     <button
                       type="button"
                       onClick={() => {
                         const yr = new Date().getFullYear();
-                        const seq = getNextSequenceNumber('outbox');
                         setNumberAssignModal(prev => ({
                           ...prev,
-                          newRefNumber: `420.3/${seq}/418.20.2.62.03/${yr}`
+                          newRefNumber: `420.3/${outboxAgenda.formattedNext}/418.20.2.62.03/${yr}`
                         }));
                       }}
                       className="px-2.5 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-mono transition-colors"
                       title="Format Surat Perintah Tugas (SPT)"
                     >
-                      SPT: 420.3/[Urut]/418.20.2.62.03/{new Date().getFullYear()}
+                      SPT: 420.3/{outboxAgenda.formattedNext}/418.20.2.62.03/{new Date().getFullYear()}
                     </button>
                     <button
                       type="button"
                       onClick={() => {
                         const yr = new Date().getFullYear();
-                        const seq = getNextSequenceNumber('outbox');
                         setNumberAssignModal(prev => ({
                           ...prev,
-                          newRefNumber: `421/${seq}/SMP.03/${yr}`
+                          newRefNumber: `421/${outboxAgenda.formattedNext}/SMP.03/${yr}`
                         }));
                       }}
                       className="px-2.5 py-1 rounded bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border border-sky-500/30 text-xs font-mono transition-colors"
                       title="Format Surat Keterangan Siswa"
                     >
-                      Keterangan: 421/[Urut]/SMP.03/{new Date().getFullYear()}
+                      Keterangan: 421/{outboxAgenda.formattedNext}/SMP.03/{new Date().getFullYear()}
                     </button>
                     <button
                       type="button"
                       onClick={() => {
                         const yr = new Date().getFullYear();
-                        const seq = getNextSequenceNumber('outbox');
                         setNumberAssignModal(prev => ({
                           ...prev,
-                          newRefNumber: `421/${seq}/418.20.2.62.03/${yr}`
+                          newRefNumber: `422/${outboxAgenda.formattedNext}/SMP.03/${yr}`
+                        }));
+                      }}
+                      className="px-2.5 py-1 rounded bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 text-xs font-mono transition-colors"
+                      title="Format Surat Pindah / Mutasi"
+                    >
+                      Pindah: 422/{outboxAgenda.formattedNext}/SMP.03/{new Date().getFullYear()}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const yr = new Date().getFullYear();
+                        setNumberAssignModal(prev => ({
+                          ...prev,
+                          newRefNumber: `421.3/${outboxAgenda.formattedNext}/SMP.03/${yr}`
+                        }));
+                      }}
+                      className="px-2.5 py-1 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-mono transition-colors"
+                      title="Format Surat Rekomendasi"
+                    >
+                      Rekomendasi: 421.3/{outboxAgenda.formattedNext}/SMP.03/{new Date().getFullYear()}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const yr = new Date().getFullYear();
+                        setNumberAssignModal(prev => ({
+                          ...prev,
+                          newRefNumber: `421.7/${outboxAgenda.formattedNext}/SMP.03/${yr}`
+                        }));
+                      }}
+                      className="px-2.5 py-1 rounded bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-mono transition-colors"
+                      title="Format Surat Legalisir Dokumen / Ijazah"
+                    >
+                      Legalisir: 421.7/{outboxAgenda.formattedNext}/SMP.03/{new Date().getFullYear()}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const yr = new Date().getFullYear();
+                        setNumberAssignModal(prev => ({
+                          ...prev,
+                          newRefNumber: `421/${outboxAgenda.formattedNext}/418.20.2.62.03/${yr}`
                         }));
                       }}
                       className="px-2.5 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-mono transition-colors"
                       title="Format Surat Dinas Umum"
                     >
-                      Dinas: 421/[Urut]/418.20.2.62.03/{new Date().getFullYear()}
+                      Dinas: 421/{outboxAgenda.formattedNext}/418.20.2.62.03/{new Date().getFullYear()}
                     </button>
                   </div>
                 </div>
@@ -2603,6 +2851,20 @@ export default function Letters() {
         targetLetter={driveModalLetter}
         selectedLetters={rawLetters.filter(l => selectedIds.includes(l.id as number))}
         mode={driveModalMode}
+      />
+
+      {/* Quick Agenda Only Modal for Admin / Teachers */}
+      <QuickAgendaModal
+        isOpen={isQuickAgendaModalOpen}
+        onClose={() => setIsQuickAgendaModalOpen(false)}
+        userRole="admin"
+        defaultApplicantRole="guru"
+      />
+
+      {/* Canva Poster & Guide Modal */}
+      <CanvaPosterModal
+        isOpen={isCanvaModalOpen}
+        onClose={() => setIsCanvaModalOpen(false)}
       />
 
       {/* Print Preview & Direct Print Modal */}

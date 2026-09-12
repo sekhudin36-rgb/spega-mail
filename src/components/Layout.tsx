@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, Link } from 'react-router-dom';
 import { 
   Mail, 
   Users, 
@@ -25,22 +25,41 @@ import {
   LogOut,
   ExternalLink,
   ChevronRight,
-  Activity
+  ChevronLeft,
+  Activity,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Palette,
+  FileDown
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import ToastProvider from './ToastProvider';
 import CommandPalette from './CommandPalette';
+import CanvaPosterModal from './CanvaPosterModal';
+import { generateFullUserManualPdf } from '../lib/pdfGuideHelper';
 import toast from 'react-hot-toast';
 
 export default function Layout() {
   const navigate = useNavigate();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true); // For mobile/desktop hide
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    return localStorage.getItem('sidebarCollapsed') === 'true';
+  });
   const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [isCanvaModalOpen, setIsCanvaModalOpen] = useState(false);
+
+  const toggleSidebarCollapse = () => {
+    setIsSidebarCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('sidebarCollapsed', String(next));
+      return next;
+    });
+  };
   const getStoredAdminName = () => {
     const saved = localStorage.getItem('adminName');
     if (!saved || saved.toLowerCase().includes('sekhudin')) {
@@ -134,8 +153,9 @@ export default function Layout() {
   };
 
   const navItems = [
-    { to: '/', icon: LayoutDashboard, label: 'Dashboard', badge: 'LIVE' },
+    { to: '/admin', icon: LayoutDashboard, label: 'Dashboard Admin', badge: 'PORTAL 2' },
     { to: '/letters', icon: Mail, label: 'Register Surat', badge: 'AGENDA' },
+    { to: '/', icon: Sparkles, label: 'Portal 1: Guru & Wali', badge: 'PORTAL 1' },
     { to: '/archives', icon: Archive, label: 'Arsip Dokumen', badge: null },
     { to: '/teachers', icon: Users, label: 'Data Dewan Guru', badge: null },
     { to: '/students', icon: GraduationCap, label: 'Data Peserta Didik', badge: null },
@@ -155,54 +175,96 @@ export default function Layout() {
         {isSidebarOpen && (
           <motion.aside
             initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 260, opacity: 1 }}
+            animate={{ width: isSidebarCollapsed ? 72 : 260, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="w-[260px] border-r border-[#1E293B] bg-[#0B0E14]/95 backdrop-blur-md flex flex-col p-4 gap-4 shrink-0 z-20 print:hidden overflow-hidden"
+            transition={{ duration: 0.2, ease: 'easeInOut' }}
+            className={cn(
+              "border-r border-[#1E293B] bg-[#0B0E14]/95 backdrop-blur-md flex flex-col p-3 gap-3 shrink-0 z-20 print:hidden overflow-hidden transition-all duration-200",
+              isSidebarCollapsed ? "w-[72px] items-center" : "w-[260px]"
+            )}
           >
-            {/* Brand Header */}
-            <div className="flex items-center gap-3 pb-3.5 border-b border-[#1E293B]">
-              <div className="relative">
-                <div className="w-9 h-9 bg-gradient-to-tr from-indigo-700 to-indigo-500 rounded-xl flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-900/50 border border-indigo-400/30">
-                  <Mail className="w-4 h-4 text-white" />
+            {/* Brand Header & Minimize Toggle */}
+            <div className={cn(
+              "flex items-center pb-3 border-b border-[#1E293B] w-full",
+              isSidebarCollapsed ? "justify-center" : "justify-between gap-2"
+            )}>
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="relative shrink-0">
+                  <div className="w-9 h-9 bg-gradient-to-tr from-indigo-700 to-indigo-500 rounded-xl flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-900/50 border border-indigo-400/30">
+                    <Mail className="w-4 h-4 text-white" />
+                  </div>
+                  <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-[#0B0E14]"></span>
                 </div>
-                <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-[#0B0E14]"></span>
+                {!isSidebarCollapsed && (
+                  <div className="min-w-0">
+                    <h1 className="font-bold text-sm tracking-tight text-white truncate flex items-center gap-1.5">
+                      {appName}
+                      <span className="text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded border border-amber-500/30">PORTAL 2</span>
+                    </h1>
+                    <p className="text-[11px] text-slate-400 truncate">Dasbor Admin TU • SMPN 3 Kras</p>
+                  </div>
+                )}
               </div>
-              <div className="min-w-0">
-                <h1 className="font-bold text-sm tracking-tight text-white truncate flex items-center gap-1.5">
-                  {appName}
-                  <span className="text-[10px] font-mono font-semibold bg-indigo-500/20 text-indigo-300 px-1 rounded border border-indigo-500/30">v3.0</span>
-                </h1>
-                <p className="text-[11px] text-slate-400 truncate">SMPN 3 Kras Kediri</p>
-              </div>
+
+              {/* Minimize / Expand Toggle Button in Sidebar Header */}
+              {!isSidebarCollapsed && (
+                <button
+                  onClick={toggleSidebarCollapse}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 border border-transparent hover:border-slate-700 transition-colors"
+                  title="Perkecil / Minimize Menu Sidebar"
+                >
+                  <PanelLeftClose className="w-4 h-4" />
+                </button>
+              )}
             </div>
 
             {/* Navigation Menu */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4">
+            <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 w-full">
               <div>
-                <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2 px-2">Modul Persuratan</p>
-                <nav className="flex flex-col gap-1">
+                {!isSidebarCollapsed && (
+                  <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2 px-2">Modul Persuratan</p>
+                )}
+                <nav className="flex flex-col gap-1 w-full">
                   {navItems.map((item) => (
                     <NavLink
                       key={item.to}
                       to={item.to}
+                      title={isSidebarCollapsed ? `${item.label} ${item.badge ? `(${item.badge})` : ''}` : undefined}
                       className={({ isActive }) =>
                         cn(
-                          'flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-all duration-150 border',
+                          'flex items-center rounded-lg text-xs transition-all duration-150 border group relative',
+                          isSidebarCollapsed 
+                            ? 'justify-center p-2.5' 
+                            : 'justify-between px-3 py-2',
                           isActive
                             ? 'bg-gradient-to-r from-indigo-950/60 to-slate-800 text-white font-semibold border-indigo-500/40 shadow-sm'
                             : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border-transparent'
                         )
                       }
                     >
-                      <div className="flex items-center gap-2.5 truncate">
-                        <item.icon className="w-4 h-4 text-indigo-400 shrink-0" />
-                        <span className="truncate">{item.label}</span>
-                      </div>
-                      {item.badge && (
-                        <span className="text-[9px] font-mono font-bold bg-indigo-500/20 text-indigo-300 px-1.5 py-0.2 rounded border border-indigo-500/30">
-                          {item.badge}
-                        </span>
+                      {({ isActive }) => (
+                        <>
+                          <div className={cn("flex items-center gap-2.5 truncate", isSidebarCollapsed && "justify-center")}>
+                            <item.icon className={cn(
+                              "w-4 h-4 shrink-0 transition-transform group-hover:scale-110",
+                              isActive ? "text-indigo-400" : "text-slate-400"
+                            )} />
+                            {!isSidebarCollapsed && (
+                              <span className="truncate">{item.label}</span>
+                            )}
+                          </div>
+
+                          {!isSidebarCollapsed && item.badge && (
+                            <span className="text-[9px] font-mono font-bold bg-indigo-500/20 text-indigo-300 px-1.5 py-0.2 rounded border border-indigo-500/30">
+                              {item.badge}
+                            </span>
+                          )}
+
+                          {/* Mini Indicator dot for collapsed state */}
+                          {isSidebarCollapsed && item.badge && (
+                            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+                          )}
+                        </>
                       )}
                     </NavLink>
                   ))}
@@ -210,34 +272,58 @@ export default function Layout() {
               </div>
 
               {/* System / Storage Monitor */}
-              <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                    <Database className="w-3 h-3 text-indigo-400" />
-                    Storage Lokal
-                  </span>
-                  <span className="text-[10px] text-emerald-400 font-mono font-bold">TERENKRIPSI</span>
+              {isSidebarCollapsed ? (
+                <div 
+                  className="p-2 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col items-center justify-center text-center cursor-help"
+                  title="Storage Lokal: Dexie IndexedDB (Terenkripsi & Cepat)"
+                >
+                  <Database className="w-4 h-4 text-emerald-400" />
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 mt-1 animate-pulse"></span>
                 </div>
-                <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-indigo-500 to-emerald-400 w-[65%] rounded-full"></div>
+              ) : (
+                <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                      <Database className="w-3 h-3 text-indigo-400" />
+                      Storage Lokal
+                    </span>
+                    <span className="text-[10px] text-emerald-400 font-mono font-bold">TERENKRIPSI</span>
+                  </div>
+                  <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-indigo-500 to-emerald-400 w-[65%] rounded-full"></div>
+                  </div>
+                  <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                    <span>Dexie IndexedDB</span>
+                    <span className="text-slate-300">Aman & Cepat</span>
+                  </div>
                 </div>
-                <div className="flex justify-between text-[10px] text-slate-400 font-mono">
-                  <span>Dexie IndexedDB</span>
-                  <span className="text-slate-300">Aman & Cepat</span>
-                </div>
-              </div>
+              )}
             </div>
 
             {/* Sidebar Bottom Footer */}
-            <div className="space-y-2 pt-2 border-t border-[#1E293B]">
+            <div className="space-y-2 pt-2 border-t border-[#1E293B] w-full">
+              {/* Expand Toggle button when collapsed */}
+              {isSidebarCollapsed && (
+                <button
+                  onClick={toggleSidebarCollapse}
+                  className="w-full flex items-center justify-center p-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-indigo-400 hover:text-white transition-all border border-slate-700"
+                  title="Perluas / Expand Menu Sidebar"
+                >
+                  <PanelLeftOpen className="w-4 h-4" />
+                </button>
+              )}
+
               {installPrompt && (
                 <button 
                   onClick={handleInstallClick}
-                  className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white shadow-md transition-all"
+                  className={cn(
+                    "w-full flex items-center justify-center gap-2 rounded-lg text-xs font-semibold bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white shadow-md transition-all",
+                    isSidebarCollapsed ? "p-2" : "px-3 py-2"
+                  )}
                   title="Instal Aplikasi Desktop / Android PWA"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  Instal Aplikasi Offline
+                  {!isSidebarCollapsed && <span>Instal Offline</span>}
                 </button>
               )}
 
@@ -246,14 +332,17 @@ export default function Layout() {
                   sessionStorage.removeItem('isAuthenticated');
                   window.location.reload();
                 }}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium bg-slate-900 hover:bg-rose-950/30 text-slate-400 hover:text-rose-300 border border-slate-800 hover:border-rose-900/40 transition-all"
+                className={cn(
+                  "w-full flex items-center rounded-lg text-xs font-medium bg-slate-900 hover:bg-rose-950/30 text-slate-400 hover:text-rose-300 border border-slate-800 hover:border-rose-900/40 transition-all",
+                  isSidebarCollapsed ? "justify-center p-2" : "justify-between px-3 py-2"
+                )}
                 title="Keluar (Logout)"
               >
                 <div className="flex items-center gap-2">
                   <LogOut className="w-3.5 h-3.5 text-rose-400" />
-                  <span>Keluar Sistem</span>
+                  {!isSidebarCollapsed && <span>Keluar Sistem</span>}
                 </div>
-                <span className="text-[10px] font-mono text-slate-500">Lock</span>
+                {!isSidebarCollapsed && <span className="text-[10px] font-mono text-slate-500">Lock</span>}
               </button>
             </div>
           </motion.aside>
@@ -267,19 +356,25 @@ export default function Layout() {
         <header className="h-14 border-b border-[#1E293B] flex items-center justify-between px-4 sm:px-6 bg-[#0F172A]/90 backdrop-blur-md shrink-0 z-20 print:hidden">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              onClick={() => {
+                if (window.innerWidth < 768) {
+                  setIsSidebarOpen(!isSidebarOpen);
+                } else {
+                  toggleSidebarCollapse();
+                }
+              }}
               className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white transition-colors"
-              title="Sembunyikan / Tampilkan Sidebar"
+              title={isSidebarCollapsed ? "Perluas Menu Sidebar" : "Perkecil / Minimize Menu Sidebar"}
             >
-              <Menu className="w-4 h-4" />
+              {isSidebarCollapsed ? <PanelLeftOpen className="w-4 h-4 text-indigo-400" /> : <Menu className="w-4 h-4" />}
             </button>
 
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-bold tracking-tight text-white hidden sm:block">
                 SPEGA Persuratan & Arsip
               </h2>
-              <span className="text-[10px] text-indigo-300 font-mono px-2 py-0.5 rounded-full bg-indigo-950/60 border border-indigo-500/30">
-                SMPN 3 KRAS
+              <span className="text-[10px] text-amber-300 font-mono font-bold px-2 py-0.5 rounded-full bg-amber-950/60 border border-amber-500/40">
+                PORTAL 2: ADMIN TU
               </span>
             </div>
 
@@ -306,6 +401,36 @@ export default function Layout() {
               title="Cari Cepat"
             >
               <Search className="w-4 h-4" />
+            </button>
+
+            {/* Portal 1 Quick Button */}
+            <Link
+              to="/"
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-950/40 hover:bg-emerald-900/50 border border-emerald-500/30 text-emerald-300 hover:text-emerald-200 transition-colors text-xs font-semibold shadow-sm"
+              title="Buka Portal 1: Layanan Draf Surat Guru & Wali Murid"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="text-[11px] hidden md:inline">Portal 1: Guru & Wali</span>
+            </Link>
+
+            {/* Panduan PDF Manual Button */}
+            <button
+              onClick={generateFullUserManualPdf}
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white transition-colors text-xs"
+              title="Unduh Buku Panduan Lengkap Penggunaan Aplikasi (Format PDF Resmi)"
+            >
+              <FileDown className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="text-[11px] font-medium hidden lg:inline">Panduan PDF</span>
+            </button>
+
+            {/* Poster Canva Button */}
+            <button
+              onClick={() => setIsCanvaModalOpen(true)}
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white transition-colors text-xs"
+              title="Desain Poster & Panduan Canva (Langkah Akses & Nomor Agenda)"
+            >
+              <Palette className="w-3.5 h-3.5 text-amber-400" />
+              <span className="text-[11px] font-medium hidden md:inline">Poster Canva</span>
             </button>
 
             {/* Fullscreen Toggle */}
@@ -421,6 +546,12 @@ export default function Layout() {
       {/* Global Spotlight Search Mount */}
       <CommandPalette isOpen={isCommandOpen} onClose={() => setIsCommandOpen(false)} />
       <ToastProvider />
+
+      {/* Canva Poster & Guide Modal */}
+      <CanvaPosterModal
+        isOpen={isCanvaModalOpen}
+        onClose={() => setIsCanvaModalOpen(false)}
+      />
     </div>
   );
 }

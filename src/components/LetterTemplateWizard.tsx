@@ -4,7 +4,8 @@ import { db, type Letter, type Student, type Teacher } from '../lib/db';
 import { 
   X, FileText, Search, User, GraduationCap, Calendar, Clock, MapPin, Check, 
   Plus, Sparkles, FileDown, ArrowRightLeft, Award, Users, BookOpen,
-  Briefcase, Send, Megaphone, Mail, ClipboardCheck, Scale, FileCheck
+  Briefcase, Send, Megaphone, Mail, ClipboardCheck, Scale, FileCheck,
+  Upload, Image, Cloud, ExternalLink, Trash2, Camera, CheckCircle2, ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
@@ -13,6 +14,13 @@ import jsPDF from 'jspdf';
 import toast from 'react-hot-toast';
 import confetti from 'canvas-confetti';
 import { drawPdfKopHeader, getSchoolConfig } from '../lib/printHelper';
+import { 
+  signInWithGoogleDrive, 
+  getGoogleAccessToken, 
+  uploadIjazahFileToGoogleDrive, 
+  getDriveFolderUrl, 
+  getRootFolderId 
+} from '../lib/googleDrive';
 
 interface LetterTemplateWizardProps {
   isOpen: boolean;
@@ -41,7 +49,8 @@ type TemplateType =
   | 'ket-kelulusan'
   | 'undangan-komite'
   | 'rekomendasi-pindah'
-  | 'pernyataan-patuh';
+  | 'pernyataan-patuh'
+  | 'legalisir-ijazah';
 
 const requiresStudent: TemplateType[] = [
   'aktif-belajar', 'kelakuan-baik', 'pindah-sekolah', 'rekomendasi-beasiswa', 
@@ -65,6 +74,24 @@ export default function LetterTemplateWizard({ isOpen, onClose, onDraftCreated, 
   // Common Fields
   const [customRefNum, setCustomRefNum] = useState('');
   const [documentDate, setDocumentDate] = useState(() => new Date().toISOString().split('T')[0]);
+
+  // 21. Surat Permohonan & Keterangan Legalisir Ijazah
+  const [alumniName, setAlumniName] = useState('');
+  const [alumniNisn, setAlumniNisn] = useState('');
+  const [alumniNis, setAlumniNis] = useState('');
+  const [ijazahNumber, setIjazahNumber] = useState('DN-05/D-SMP/K13/23/0012345');
+  const [graduationYear, setGraduationYear] = useState('2023/2024');
+  const [graduationDate, setGraduationDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [birthPlaceDate, setBirthPlaceDate] = useState('Kediri, 12 Mei 2008');
+  const [parentName, setParentName] = useState('');
+  const [sheetCount, setSheetCount] = useState('5');
+  const [legalisirPurpose, setLegalisirPurpose] = useState('Persyaratan Pendaftaran Sekolah Lanjutan Tingkat Atas (SMA/SMK/MA) & Kelengkapan Administrasi');
+  const [verificationNotes, setVerificationNotes] = useState('Telah diperiksa dan dicocokkan dengan Dokumen Asli Ijazah serta Buku Induk Siswa SMP Negeri 3 Kras, dan dinyatakan SAH / SESUAI dengan aslinya.');
+  const [ijazahPhoto, setIjazahPhoto] = useState<string | null>(null);
+  const [ijazahPhotoName, setIjazahPhotoName] = useState<string>('');
+  const [ijazahDriveUrl, setIjazahDriveUrl] = useState<string>('');
+  const [ijazahDriveFileId, setIjazahDriveFileId] = useState<string>('');
+  const [isUploadingToDrive, setIsUploadingToDrive] = useState<boolean>(false);
 
   // Template Specific Fields
   // 1. Surat Keterangan Aktif Belajar
@@ -213,11 +240,87 @@ export default function LetterTemplateWizard({ isOpen, onClose, onDraftCreated, 
       'ket-kelulusan': '421.3',
       'undangan-komite': '005.2',
       'rekomendasi-pindah': '421.5',
-      'pernyataan-patuh': '421.4'
+      'pernyataan-patuh': '421.4',
+      'legalisir-ijazah': '421.3'
     };
     
     setCustomRefNum(`${codes[template]}/${seq}/SMP.03/${currentYear}`);
   }, [template, isOpen]);
+
+  // Sync selectedStudent to Alumni data when template is legalisir-ijazah
+  useEffect(() => {
+    if (selectedStudent && template === 'legalisir-ijazah') {
+      setAlumniName(selectedStudent.name);
+      setAlumniNisn(selectedStudent.nisn || '');
+      setAlumniNis(selectedStudent.nis || '');
+      if (selectedStudent.birthPlace || selectedStudent.birthDate) {
+        setBirthPlaceDate(`${selectedStudent.birthPlace || 'Kediri'}, ${selectedStudent.birthDate || ''}`);
+      }
+    }
+  }, [selectedStudent, template]);
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Ukuran foto ijazah maksimal 5MB');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setIjazahPhoto(reader.result as string);
+      setIjazahPhotoName(file.name);
+      toast.success('Foto ijazah berhasil dimuat!');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleUploadPhotoToDrive = async () => {
+    if (!ijazahPhoto) {
+      toast.error('Silakan pilih/unggah foto ijazah terlebih dahulu');
+      return;
+    }
+
+    try {
+      setIsUploadingToDrive(true);
+      let token = await getGoogleAccessToken();
+      if (!token) {
+        toast('Menghubungkan ke Akun Google Drive...', { icon: '☁️' });
+        const signResult = await signInWithGoogleDrive();
+        if (!signResult?.accessToken) {
+          throw new Error('Autentikasi Google Drive dibatalkan atau tidak tersedia');
+        }
+        token = signResult.accessToken;
+      }
+
+      // Convert Base64 data URI to Blob
+      const fetchRes = await fetch(ijazahPhoto);
+      const photoBlob = await fetchRes.blob();
+
+      const studentNameTarget = alumniName || selectedStudent?.name || 'Siswa_Alumni';
+      const result = await uploadIjazahFileToGoogleDrive(
+        photoBlob,
+        ijazahPhotoName || 'Foto_Ijazah.jpg',
+        studentNameTarget,
+        ijazahNumber,
+        token
+      );
+
+      if (result.webViewLink) {
+        setIjazahDriveUrl(result.webViewLink);
+      }
+      if (result.id) {
+        setIjazahDriveFileId(result.id);
+      }
+
+      toast.success('Foto Ijazah berhasil disimpan di Google Drive (Folder: 📁 Berkas Ijazah & Legalisir)!');
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Gagal menyimpan ke Google Drive: ${err.message || 'Error tidak diketahui'}`);
+    } finally {
+      setIsUploadingToDrive(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -236,6 +339,14 @@ export default function LetterTemplateWizard({ isOpen, onClose, onDraftCreated, 
     }
     if (reqTeacherList.includes(template) && !selectedTeacher) {
       alert('Silakan pilih Guru/Pegawai dari Data Kepegawaian terlebih dahulu.');
+      return;
+    }
+    if (template === 'legalisir-ijazah' && !alumniName.trim() && !selectedStudent) {
+      alert('Silakan masukkan Nama Lengkap Siswa / Alumni untuk legalisir ijazah.');
+      return;
+    }
+    if (template === 'legalisir-ijazah' && !ijazahNumber.trim()) {
+      alert('Silakan masukkan Nomor Seri Ijazah.');
       return;
     }
 
@@ -1254,6 +1365,140 @@ Demikian surat tugas ini dibuat untuk dilaksanakan dengan penuh tanggung jawab.`
 
         doc.text('Demikian surat pernyataan ini dibuat untuk dipegang teguh dan dilaksanakan dengan penuh rasa tanggung jawab.', 15, 148);
         signatureY = 160;
+
+      } else if (template === 'legalisir-ijazah') {
+        // 21. Surat Keterangan Pengesahan / Legalisir Ijazah
+        const studentNameFinal = alumniName.trim() || selectedStudent?.name || 'Alumni / Pemohon';
+        letterTitle = `Surat Keterangan Legalisir Ijazah - ${studentNameFinal}`;
+        recipientOrRecipientText = studentNameFinal;
+        letterDescription = `Surat pengesahan/legalisir ijazah No. Seri ${ijazahNumber} tahun kelulusan ${graduationYear} atas nama ${studentNameFinal} sejumlah ${sheetCount} lembar untuk keperluan ${legalisirPurpose}.`;
+        letterCategory = 'Kesiswaan';
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(12);
+        doc.text('SURAT KETERANGAN PENGESAHAN / LEGALISIR IJAZAH', 105, 45, { align: 'center' });
+        doc.line(25, 46.5, 185, 46.5);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.text(`Nomor: ${customRefNum}`, 105, 51, { align: 'center' });
+
+        doc.text('Yang bertanda tangan di bawah ini Kepala Sekolah Menengah Pertama Negeri 3 Kras, Kabupaten Kediri, dengan ini menerangkan bahwa:', 15, 60, { maxWidth: 180 });
+        
+        let yTable = 68;
+        const rowGap = 5.5;
+
+        doc.setFont('helvetica', 'bold');
+        doc.text('1. Nama Siswa / Alumni', 20, yTable);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`:  ${studentNameFinal}`, 75, yTable);
+
+        yTable += rowGap;
+        doc.setFont('helvetica', 'bold');
+        doc.text('2. Tempat, Tanggal Lahir', 20, yTable);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`:  ${birthPlaceDate || '-'}`, 75, yTable);
+
+        yTable += rowGap;
+        doc.setFont('helvetica', 'bold');
+        doc.text('3. NIS / NISN', 20, yTable);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`:  ${alumniNis || selectedStudent?.nis || '-'} / ${alumniNisn || selectedStudent?.nisn || '-'}`, 75, yTable);
+
+        yTable += rowGap;
+        doc.setFont('helvetica', 'bold');
+        doc.text('4. Nomor Seri Ijazah', 20, yTable);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`:  ${ijazahNumber}`, 75, yTable);
+
+        yTable += rowGap;
+        doc.setFont('helvetica', 'bold');
+        doc.text('5. Tahun Kelulusan', 20, yTable);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`:  ${graduationYear}`, 75, yTable);
+
+        if (parentName) {
+          yTable += rowGap;
+          doc.setFont('helvetica', 'bold');
+          doc.text('6. Nama Orang Tua / Wali', 20, yTable);
+          doc.setFont('helvetica', 'normal');
+          doc.text(`:  ${parentName}`, 75, yTable);
+        }
+
+        yTable += rowGap;
+        doc.setFont('helvetica', 'bold');
+        doc.text('7. Keperluan Pengesahan', 20, yTable);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`:  ${legalisirPurpose}`, 75, yTable, { maxWidth: 115 });
+
+        yTable += 7.5;
+        doc.setFont('helvetica', 'bold');
+        doc.text('8. Jumlah Pengesahan', 20, yTable);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`:  ${sheetCount} (${sheetCount}) Lembar Fotokopi Terlegalisir`, 75, yTable);
+
+        if (ijazahDriveUrl) {
+          yTable += rowGap;
+          doc.setFont('helvetica', 'bold');
+          doc.text('9. Arsip Cloud Google Drive', 20, yTable);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(3, 105, 161);
+          doc.text(`:  Tersimpan Digital & Terverifikasi (Folder 📁 Berkas Ijazah & Legalisir)`, 75, yTable);
+          doc.setTextColor(0, 0, 0);
+        }
+
+        yTable += 9;
+        const statementText = `Berdasarkan catatan Buku Induk Siswa dan Arsip Dokumen Sekolah, yang bersangkutan adalah benar-benar lulusan/alumni dari ${schoolName}. Fotokopi Ijazah yang diajukan telah diverifikasi dan dicocokkan dengan Dokumen Ijazah Aslinya dan dinyatakan BENAR, SAH, dan SESUAI DENGAN ASLINYA.`;
+        doc.text(doc.splitTextToSize(statementText, 180), 15, yTable);
+
+        yTable += 18;
+        doc.text('Demikian surat keterangan legalisir ijazah ini dibuat dengan sebenarnya untuk dapat dipergunakan sebagaimana mestinya.', 15, yTable);
+
+        signatureY = yTable + 10;
+
+        // If Ijazah photo exists, attach on page 2
+        if (ijazahPhoto) {
+          try {
+            doc.addPage();
+            drawPdfKopHeader(doc, config, false);
+            
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(11);
+            doc.text('LAMPIRAN DOKUMEN FOTO / SCAN IJAZAH TERLEGALISIR', 105, 45, { align: 'center' });
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.text(`Nama: ${studentNameFinal} | No. Seri: ${ijazahNumber} | Tahun Lulus: ${graduationYear}`, 105, 50, { align: 'center' });
+            doc.line(15, 52, 195, 52);
+
+            doc.addImage(ijazahPhoto, 'JPEG', 25, 56, 160, 105);
+            
+            // Stamp box watermark
+            doc.setDrawColor(3, 105, 161);
+            doc.setLineWidth(0.6);
+            doc.rect(25, 166, 160, 18);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(9);
+            doc.setTextColor(3, 105, 161);
+            doc.text('PENGESAHAN DOKUMEN IJAZAH - SMP NEGERI 3 KRAS KEDIRI', 105, 172, { align: 'center' });
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8);
+            doc.text('SALINAN FOTOKOPI/SCAN INI TELAH DICOCOKKAN DENGAN IJAZAH ASLI DAN BUKU INDUK SISWA', 105, 177, { align: 'center' });
+            doc.setTextColor(0, 0, 0);
+
+            // Signature on page 2 footer
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.text(`Kediri, ${formattedDocDate}`, 140, 192);
+            doc.text(`Kepala ${schoolName},`, 140, 197);
+            doc.setFont('helvetica', 'bold');
+            doc.text(headmaster, 140, 214);
+            doc.setFont('helvetica', 'normal');
+            if (headmasterNip) {
+              doc.text(`NIP. ${headmasterNip}`, 140, 218);
+            }
+          } catch (imgErr) {
+            console.warn('Could not render image to PDF:', imgErr);
+          }
+        }
       }
 
       // DRAW SHARED FOOTER SIGNATURE
@@ -1286,7 +1531,7 @@ Demikian surat tugas ini dibuat untuk dilaksanakan dengan penuh tanggung jawab.`
         indexData: letterCategory,
         sequenceNumber: getNextSequenceNumber('outbox'),
         code: customRefNum.split('/')[0],
-        attachment: '-',
+        attachment: ijazahPhoto ? 'Foto Ijazah Terlampir' : '-',
         documentDate: documentDate,
         urgency: 'Biasa',
         securityStyle: 'Biasa',
@@ -1298,13 +1543,29 @@ Demikian surat tugas ini dibuat untuk dilaksanakan dengan penuh tanggung jawab.`
         fileType: 'application/pdf',
         isDraft: true,
         templateType: template,
+        driveFileUrl: ijazahDriveUrl || undefined,
+        driveFileId: ijazahDriveFileId || undefined,
+        ijazahNumber: template === 'legalisir-ijazah' ? ijazahNumber : undefined,
+        graduationYear: template === 'legalisir-ijazah' ? graduationYear : undefined,
+        graduationDate: template === 'legalisir-ijazah' ? graduationDate : undefined,
+        birthPlaceDate: template === 'legalisir-ijazah' ? birthPlaceDate : undefined,
+        parentName: template === 'legalisir-ijazah' ? parentName : undefined,
+        sheetCount: template === 'legalisir-ijazah' && sheetCount ? parseInt(sheetCount, 10) || undefined : undefined,
         templatePayload: JSON.stringify({
           template,
           letterTitle,
           letterCategory,
           recipientOrRecipientText,
           selectedStudent,
-          selectedTeacher
+          selectedTeacher,
+          ijazahNumber,
+          graduationYear,
+          graduationDate,
+          birthPlaceDate,
+          parentName,
+          sheetCount,
+          ijazahDriveUrl,
+          ijazahDriveFileId
         }),
         createdAt: new Date().toISOString()
       };
@@ -1342,7 +1603,7 @@ Demikian surat tugas ini dibuat untuk dilaksanakan dengan penuh tanggung jawab.`
       >
         <div className="p-6 border-b border-slate-700/50 flex justify-between items-center bg-slate-800/20 shrink-0">
           <h3 className="text-xl font-medium text-white flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-sky-400" /> Draf & Pembuat Surat Resmi Otomatis (20 Template Lengkap)
+            <Sparkles className="w-5 h-5 text-sky-400" /> Draf & Pembuat Surat Resmi Otomatis (21 Template Lengkap)
           </h3>
           <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
             <X className="w-5 h-5" />
@@ -1374,7 +1635,8 @@ Demikian surat tugas ini dibuat untuk dilaksanakan dengan penuh tanggung jawab.`
                 { id: 'ket-kelulusan', label: 'SK Kelulusan', desc: 'Keterangan Lulus (SKL)', icon: GraduationCap },
                 { id: 'undangan-komite', label: 'Undangan Komite', desc: 'Pertemuan komite sekolah', icon: Users },
                 { id: 'rekomendasi-pindah', label: 'Rekomendasi Pindah', desc: 'Surat rekomendasi mutasi', icon: ArrowRightLeft },
-                { id: 'pernyataan-patuh', label: 'Pernyataan Patuh', desc: 'Tata tertib & kesanggupan', icon: Scale }
+                { id: 'pernyataan-patuh', label: 'Pernyataan Patuh', desc: 'Tata tertib & kesanggupan', icon: Scale },
+                { id: 'legalisir-ijazah', label: 'Legalisir Ijazah', desc: 'Permohonan & validasi ijazah + Drive', icon: ShieldCheck }
               ].map(tpl => {
                 const Icon = tpl.icon;
                 return (
@@ -1412,9 +1674,11 @@ Demikian surat tugas ini dibuat untuk dilaksanakan dengan penuh tanggung jawab.`
               </h4>
 
               {/* STUDENT AUTOCOMPLETE SELECTOR */}
-              {requiresStudent.includes(template) && (
+              {(requiresStudent.includes(template) || template === 'legalisir-ijazah') && (
                 <div className="space-y-1 relative">
-                  <label className="text-xs font-medium text-slate-400">CARI SISWA DARI DATA AKADEMIK</label>
+                  <label className="text-xs font-medium text-slate-400">
+                    {template === 'legalisir-ijazah' ? 'CARI SISWA / ALUMNI DARI DATABASE (OPSIONAL)' : 'CARI SISWA DARI DATA AKADEMIK'}
+                  </label>
                   <div className="relative">
                     <input
                       type="text"
@@ -2353,6 +2617,232 @@ Demikian surat tugas ini dibuat untuk dilaksanakan dengan penuh tanggung jawab.`
                       onChange={(e) => setPatuhPoints(e.target.value)}
                       className="glass-input w-full text-xs resize-none custom-scrollbar"
                     />
+                  </div>
+                </div>
+              )}
+
+              {/* 21. LEGALISIR IJAZAH DRAF DOKUMEN & GOOGLE DRIVE */}
+              {template === 'legalisir-ijazah' && (
+                <div className="space-y-4">
+                  {/* Data Penting Ijazah Section */}
+                  <div className="p-3.5 bg-slate-900/60 rounded-xl border border-sky-500/20 space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-700/50 pb-2">
+                      <span className="text-xs font-bold text-sky-400 flex items-center gap-1.5 uppercase tracking-wide">
+                        <GraduationCap className="w-4 h-4 text-sky-400" />
+                        Data Penting Ijazah & Pemohon
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-mono">Buku Induk & Arsip</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1 sm:col-span-2">
+                        <label className="text-[10px] font-medium text-slate-300">NAMA LENGKAP SISWA / ALUMNI *</label>
+                        <input 
+                          type="text" 
+                          placeholder="Nama lengkap sesuai Ijazah..."
+                          value={alumniName}
+                          onChange={(e) => setAlumniName(e.target.value)}
+                          className="glass-input w-full text-xs font-semibold text-white"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-medium text-slate-400">TEMPAT & TANGGAL LAHIR</label>
+                        <input 
+                          type="text" 
+                          placeholder="contoh: Kediri, 12 Mei 2008"
+                          value={birthPlaceDate}
+                          onChange={(e) => setBirthPlaceDate(e.target.value)}
+                          className="glass-input w-full text-xs py-1"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-medium text-slate-400">NIS / NISN</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <input 
+                            type="text" 
+                            placeholder="NIS"
+                            value={alumniNis}
+                            onChange={(e) => setAlumniNis(e.target.value)}
+                            className="glass-input w-full text-xs py-1"
+                          />
+                          <input 
+                            type="text" 
+                            placeholder="NISN"
+                            value={alumniNisn}
+                            onChange={(e) => setAlumniNisn(e.target.value)}
+                            className="glass-input w-full text-xs py-1"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-medium text-amber-400 font-semibold">NOMOR SERI IJAZAH *</label>
+                        <input 
+                          type="text" 
+                          placeholder="contoh: DN-05/D-SMP/K13/23/0012345"
+                          value={ijazahNumber}
+                          onChange={(e) => setIjazahNumber(e.target.value)}
+                          className="glass-input w-full text-xs py-1 font-mono text-amber-200 border-amber-500/30"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-medium text-slate-400">TAHUN KELULUSAN *</label>
+                        <input 
+                          type="text" 
+                          placeholder="contoh: 2023/2024"
+                          value={graduationYear}
+                          onChange={(e) => setGraduationYear(e.target.value)}
+                          className="glass-input w-full text-xs py-1"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-medium text-slate-400">NAMA ORANG TUA / WALI</label>
+                        <input 
+                          type="text" 
+                          placeholder="Nama Ayah/Ibu/Wali"
+                          value={parentName}
+                          onChange={(e) => setParentName(e.target.value)}
+                          className="glass-input w-full text-xs py-1"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-medium text-slate-400">JUMLAH LEMBAR LEGALISIR</label>
+                        <input 
+                          type="number" 
+                          min={1}
+                          max={20}
+                          value={sheetCount}
+                          onChange={(e) => setSheetCount(e.target.value)}
+                          className="glass-input w-full text-xs py-1"
+                        />
+                      </div>
+
+                      <div className="space-y-1 sm:col-span-2">
+                        <label className="text-[10px] font-medium text-slate-400">KEPERLUAN PERMOHONAN LEGALISIR</label>
+                        <input 
+                          type="text" 
+                          value={legalisirPurpose}
+                          onChange={(e) => setLegalisirPurpose(e.target.value)}
+                          className="glass-input w-full text-xs py-1"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Foto Ijazah & Google Drive Integration Box */}
+                  <div className="p-3.5 bg-gradient-to-br from-slate-900 to-indigo-950/40 rounded-xl border border-indigo-500/30 space-y-3">
+                    <div className="flex items-center justify-between border-b border-indigo-800/40 pb-2">
+                      <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5 uppercase tracking-wide">
+                        <Cloud className="w-4 h-4 text-indigo-400" />
+                        Unggah Foto Ijazah & Simpan Google Drive
+                      </span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-900/60 text-indigo-300 border border-indigo-500/30">
+                        Cloud Drive
+                      </span>
+                    </div>
+
+                    {/* File Picker & Drop area */}
+                    {!ijazahPhoto ? (
+                      <label className="border-2 border-dashed border-slate-700 hover:border-indigo-500/60 rounded-xl p-4 flex flex-col items-center justify-center gap-2 cursor-pointer transition-all bg-slate-950/40 hover:bg-indigo-950/20 group">
+                        <input 
+                          type="file" 
+                          accept="image/*,.pdf" 
+                          onChange={handlePhotoUpload} 
+                          className="hidden" 
+                        />
+                        <div className="w-10 h-10 rounded-full bg-indigo-500/10 group-hover:bg-indigo-500/20 flex items-center justify-center text-indigo-400 transition-colors">
+                          <Upload className="w-5 h-5" />
+                        </div>
+                        <div className="text-center">
+                          <span className="text-xs font-medium text-slate-200 group-hover:text-indigo-300">
+                            Klik untuk Pilih Foto / Scan Ijazah
+                          </span>
+                          <p className="text-[10px] text-slate-500 mt-0.5">Mendukung format JPG, PNG, WebP (Maks. 5 MB)</p>
+                        </div>
+                      </label>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="relative rounded-lg overflow-hidden border border-indigo-500/40 bg-slate-950 p-2 flex items-center gap-3">
+                          <img 
+                            src={ijazahPhoto} 
+                            alt="Preview Ijazah" 
+                            className="w-16 h-20 object-cover rounded border border-slate-700 shrink-0" 
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                              <span className="text-xs font-semibold text-white truncate">
+                                {ijazahPhotoName || 'Foto_Ijazah.jpg'}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-0.5">
+                              Foto ijazah siap dilampirkan pada halaman pengesahan PDF.
+                            </p>
+                            {ijazahDriveUrl && (
+                              <a 
+                                href={ijazahDriveUrl} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="inline-flex items-center gap-1 text-[11px] text-emerald-400 hover:text-emerald-300 mt-1.5 font-medium underline"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                                Buka di Google Drive
+                              </a>
+                            )}
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIjazahPhoto(null);
+                              setIjazahPhotoName('');
+                              setIjazahDriveUrl('');
+                              setIjazahDriveFileId('');
+                            }}
+                            className="p-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-800/40 text-xs transition-colors shrink-0"
+                            title="Hapus / Ganti Foto"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        {/* Google Drive Upload Trigger Button */}
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleUploadPhotoToDrive}
+                            disabled={isUploadingToDrive}
+                            className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all border shadow-sm ${
+                              ijazahDriveUrl
+                                ? 'bg-emerald-950/50 hover:bg-emerald-900/50 text-emerald-300 border-emerald-500/40'
+                                : 'bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white border-indigo-400/40'
+                            }`}
+                          >
+                            {isUploadingToDrive ? (
+                              <>
+                                <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                <span>Mengunggah ke Google Drive...</span>
+                              </>
+                            ) : ijazahDriveUrl ? (
+                              <>
+                                <Cloud className="w-3.5 h-3.5 text-emerald-400" />
+                                <span>Tersimpan di Google Drive (📁 Folder Legalisir) - Unggah Ulang</span>
+                              </>
+                            ) : (
+                              <>
+                                <Cloud className="w-3.5 h-3.5" />
+                                <span>Simpan Foto Ijazah ke Google Drive</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

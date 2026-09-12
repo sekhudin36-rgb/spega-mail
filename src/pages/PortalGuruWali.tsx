@@ -27,7 +27,19 @@ import {
   Search,
   MessageCircle,
   HelpCircle,
-  Briefcase
+  Briefcase,
+  Hash,
+  RotateCcw,
+  Settings2,
+  BookOpen,
+  ArrowRight,
+  Filter,
+  Tag,
+  Zap,
+  Palette,
+  Lock,
+  KeyRound,
+  FileDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
@@ -36,6 +48,10 @@ import { useNavigate, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import confetti from 'canvas-confetti';
 import { jsPDF } from 'jspdf';
+import QuickAgendaModal from '../components/QuickAgendaModal';
+import CanvaPosterModal from '../components/CanvaPosterModal';
+import AdminPinModal from '../components/AdminPinModal';
+import { generateFullUserManualPdf } from '../lib/pdfGuideHelper';
 import { 
   getSchoolConfig, 
   drawPdfKopHeader, 
@@ -50,6 +66,13 @@ import {
   generateSuratDinasResmiPDF,
   generateCombinedDraftPDF
 } from '../lib/printHelper';
+import { 
+  getLatestAgendaInfo, 
+  getTemplateClassification, 
+  buildOfficialLetterNumber,
+  getOutboxAgendaList,
+  type AgendaItem 
+} from '../lib/agendaHelper';
 import PrintPreviewModal from '../components/PrintPreviewModal';
 import { cn } from '../lib/utils';
 
@@ -74,8 +97,13 @@ export default function PortalGuruWali() {
   const [loginExtra, setLoginExtra] = useState('');
   const [loginError, setLoginError] = useState('');
 
-  // Active Tab: 'buat_draf' | 'riwayat'
-  const [activeTab, setActiveTab] = useState<'buat_draf' | 'riwayat'>('buat_draf');
+  // Active Tab: 'buat_draf' | 'riwayat' | 'registrasi_agenda'
+  const [activeTab, setActiveTab] = useState<'buat_draf' | 'riwayat' | 'registrasi_agenda'>('buat_draf');
+
+  // State untuk Tab Registrasi Agenda Surat Otomatis
+  const [agendaSearchQuery, setAgendaSearchQuery] = useState('');
+  const [agendaYearFilter, setAgendaYearFilter] = useState<number>(new Date().getFullYear());
+  const [agendaStatusFilter, setAgendaStatusFilter] = useState<'all' | 'approved' | 'pending'>('all');
 
   // Wizard state for Draft creation
   const [selectedCategory, setSelectedCategory] = useState<string>('');
@@ -121,6 +149,27 @@ export default function PortalGuruWali() {
   // Fetch teachers & students from database
   const teachers = useLiveQuery(() => db.teachers.toArray()) || [];
   const students = useLiveQuery(() => db.students.toArray()) || [];
+  const allLetters = useLiveQuery(() => db.letters.toArray()) || [];
+
+  // Hitung nomor agenda surat keluar terakhir & berikutnya secara otomatis
+  const outboxAgenda = getLatestAgendaInfo(allLetters, 'outbox');
+
+  // State Registrasi Nomor Agenda Surat Otomatis
+  const [useAutoAgenda, setUseAutoAgenda] = useState(true);
+  const [manualAgendaSeq, setManualAgendaSeq] = useState('');
+  const [customClassificationCode, setCustomClassificationCode] = useState('');
+  const [showAgendaSettings, setShowAgendaSettings] = useState(false);
+  const [isQuickAgendaModalOpen, setIsQuickAgendaModalOpen] = useState(false);
+  const [isCanvaModalOpen, setIsCanvaModalOpen] = useState(false);
+  const [isAdminPinModalOpen, setIsAdminPinModalOpen] = useState(false);
+
+  // Sync kode klasifikasi ketika template kategori berubah
+  useEffect(() => {
+    if (selectedCategory) {
+      const cls = getTemplateClassification(selectedCategory);
+      setCustomClassificationCode(cls.code);
+    }
+  }, [selectedCategory]);
 
   // Fetch letters submitted by this user (or all drafts if in guest mode)
   const myLetters = useLiveQuery(async () => {
@@ -453,16 +502,27 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
     try {
       const config = getSchoolConfig();
       const currentYear = new Date().getFullYear();
-      const isSuratTugas = selectedCategory === 'guru_tugas';
-      const refNumber = isSuratTugas 
-        ? `420.3/DRAF-${Date.now().toString().slice(-4)}/418.20.2.62.03/${currentYear}`
-        : `421/DRAF-${Date.now().toString().slice(-4)}/SMP.03/${currentYear}`;
+      const templateConfig = getTemplateClassification(selectedCategory);
+      
+      // Hitung nomor urut agenda berikutnya secara otomatis meneruskan agenda sebelumnya
+      const effectiveSeq = useAutoAgenda 
+        ? outboxAgenda.formattedNext 
+        : (manualAgendaSeq.trim() || outboxAgenda.formattedNext);
+      const effectiveCode = customClassificationCode || templateConfig.code;
+      const refNumber = buildOfficialLetterNumber(
+        effectiveCode,
+        effectiveSeq,
+        templateConfig.instansiCode,
+        currentYear
+      );
       const fullBody = constructLetterBody();
 
       const newLetter: Letter = {
         type: 'outbox',
-        category: selectedCategory.startsWith('guru') ? 'Kepegawaian' : 'Kesiswaan',
+        category: templateConfig.category,
         referenceNumber: refNumber,
+        sequenceNumber: effectiveSeq,
+        code: effectiveCode,
         title: letterTitle,
         senderOrRecipient: scholarshipOrAgency || (session.role === 'guru' ? 'Kepala Sekolah / Dinas Pendidikan' : 'Orang Tua / Siswa Bersangkutan'),
         date: documentDate,
@@ -471,7 +531,7 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
         status: 'active',
         urgency: urgency,
         securityStyle: 'Biasa',
-        processingUnit: session.role === 'guru' ? 'Bidang GTK & Kepegawaian' : 'Bidang Kesiswaan & Tata Usaha',
+        processingUnit: templateConfig.unit,
         receivedBy: `${session.name} (${session.phone})`,
         isDraft: true,
         templateType: selectedCategory,
@@ -487,16 +547,27 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
       const letterId = await db.letters.add(newLetter);
       newLetter.id = letterId as number;
 
+      // Log ke Riwayat Sistem
+      await db.systemLogs.add({
+        timestamp: new Date().toISOString(),
+        action: 'Registrasi Agenda Pengajuan',
+        category: 'Persuratan',
+        level: 'info',
+        user: `${session.name} (${session.role})`,
+        details: `Permohonan surat '${letterTitle}' didaftarkan dengan Nomor Agenda #${effectiveSeq} (${refNumber}), meneruskan agenda nomor sebelumnya (#${outboxAgenda.formattedLast}).`
+      });
+
       // Generate ONLY Surat Permohonan as submission proof for Applicant (Official letter requires admin approval)
       generateSuratPermohonanPDF(newLetter, config);
 
       confetti({ particleCount: 90, spread: 90, origin: { y: 0.6 } });
-      toast.success('Draf permohonan berhasil dikirim ke Petugas Tata Usaha! Dokumen bukti Surat Permohonan telah diunduh. Surat Dinas Resmi Sekolah dapat dicetak setelah diverifikasi & disetujui oleh Admin TU.', { duration: 6000 });
+      toast.success(`Draf permohonan berhasil dikirim dengan Nomor Agenda #${effectiveSeq} (${refNumber}), meneruskan nomor agenda keluar sebelumnya (#${outboxAgenda.formattedLast})! Naskah resmi dapat dicetak setelah diverifikasi & disetujui Admin TU.`, { duration: 7000 });
       
       // Reset form & go to history tab
       setSelectedCategory('');
       setPurpose('');
       setCustomContent('');
+      setManualAgendaSeq('');
       setActiveTab('riwayat');
     } catch (err) {
       console.error(err);
@@ -565,10 +636,105 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
     }
   };
 
+  // Konfigurasi nomor agenda surat keluar dinamis untuk preview dan formulir
+  const currentTemplateClassification = getTemplateClassification(selectedCategory);
+  const effectiveClassificationCode = customClassificationCode || currentTemplateClassification.code;
+  const effectiveSeq = useAutoAgenda 
+    ? outboxAgenda.formattedNext 
+    : (manualAgendaSeq.trim() || outboxAgenda.formattedNext);
+  const currentYear = new Date().getFullYear();
+  const previewOfficialRef = buildOfficialLetterNumber(
+    effectiveClassificationCode,
+    effectiveSeq,
+    currentTemplateClassification.instansiCode,
+    currentYear
+  );
+
+  // Daftar surat keluar untuk Buku Register Agenda Surat Keluar
+  const outboxAgendaList = getOutboxAgendaList(allLetters, agendaYearFilter);
+  const filteredAgendaList = outboxAgendaList.filter(item => {
+    if (agendaStatusFilter === 'approved' && item.submissionStatus !== 'approved') return false;
+    if (agendaStatusFilter === 'pending' && item.submissionStatus === 'approved') return false;
+    if (!agendaSearchQuery.trim()) return true;
+    const q = agendaSearchQuery.toLowerCase();
+    return (
+      item.formattedSeq.includes(q) ||
+      item.referenceNumber.toLowerCase().includes(q) ||
+      item.title.toLowerCase().includes(q) ||
+      item.senderOrRecipient.toLowerCase().includes(q) ||
+      (item.applicantName && item.applicantName.toLowerCase().includes(q))
+    );
+  });
+
+  const handleStartDraftWithAgenda = (presetCode?: string) => {
+    setUseAutoAgenda(true);
+    if (presetCode) {
+      setCustomClassificationCode(presetCode);
+    }
+    setActiveTab('buat_draf');
+    toast.success(`Nomor Agenda #${outboxAgenda.formattedNext} siap digunakan untuk draf surat keluar baru!`, { icon: '📝' });
+  };
+
+  const handlePrintBukuAgenda = () => {
+    const config = getSchoolConfig();
+    const kopHtml = renderOfficialKopHTML(config);
+    const rows = filteredAgendaList.map((item) => `
+      <tr>
+        <td style="border: 1px solid #334155; padding: 6px 8px; text-align: center; font-family: monospace; font-weight: bold; font-size: 11px;">#${item.formattedSeq}</td>
+        <td style="border: 1px solid #334155; padding: 6px 8px; font-family: monospace; font-size: 10px;">${item.referenceNumber}</td>
+        <td style="border: 1px solid #334155; padding: 6px 8px; text-align: center; font-size: 10px;">${item.date ? format(new Date(item.date), 'dd/MM/yyyy') : '-'}</td>
+        <td style="border: 1px solid #334155; padding: 6px 8px; font-size: 11px;"><b>${item.title}</b></td>
+        <td style="border: 1px solid #334155; padding: 6px 8px; font-size: 10px;">${item.senderOrRecipient}</td>
+        <td style="border: 1px solid #334155; padding: 6px 8px; font-size: 10px;">${item.applicantName || 'Tata Usaha'} ${item.applicantRole ? `(${item.applicantRole === 'guru' ? 'Guru' : 'Wali'})` : ''}</td>
+        <td style="border: 1px solid #334155; padding: 6px 8px; text-align: center; font-size: 10px;">${item.submissionStatus === 'approved' ? '<span style="color: #047857; font-weight: bold;">Disetujui / Resmi</span>' : (item.isDraft ? '<span style="color: #b45309;">Draf Menunggu</span>' : '<span style="color: #0284c7;">Aktif</span>')}</td>
+      </tr>
+    `).join('');
+
+    const fullHtml = `
+      <div style="font-family: 'Times New Roman', Times, serif; color: #0f172a; padding: 20px;">
+        ${kopHtml}
+        <div style="text-align: center; margin: 16px 0 12px 0;">
+          <h3 style="margin: 0; font-size: 13pt; text-decoration: underline; text-transform: uppercase; font-weight: bold;">BUKU REGISTER NOMOR AGENDA SURAT KELUAR</h3>
+          <p style="margin: 3px 0 0 0; font-size: 10.5pt;">Tahun Periode Registrasi: ${agendaYearFilter} • SMP Negeri 3 Kras Kediri</p>
+        </div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 10pt; margin-top: 10px;">
+          <thead>
+            <tr style="background-color: #f1f5f9;">
+              <th style="border: 1px solid #334155; padding: 6px; width: 65px; font-size: 10px;">AGENDA</th>
+              <th style="border: 1px solid #334155; padding: 6px; width: 140px; font-size: 10px;">NOMOR SURAT RESMI</th>
+              <th style="border: 1px solid #334155; padding: 6px; width: 80px; font-size: 10px;">TANGGAL</th>
+              <th style="border: 1px solid #334155; padding: 6px; font-size: 10px;">PERIHAL / ISI SURAT</th>
+              <th style="border: 1px solid #334155; padding: 6px; width: 120px; font-size: 10px;">TUJUAN</th>
+              <th style="border: 1px solid #334155; padding: 6px; width: 110px; font-size: 10px;">PEMOHON / PENGUSUL</th>
+              <th style="border: 1px solid #334155; padding: 6px; width: 85px; font-size: 10px;">STATUS</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.length > 0 ? rows : `<tr><td colspan="7" style="border: 1px solid #334155; padding: 16px; text-align: center; color: #64748b;">Belum ada data surat keluar pada periode tahun ${agendaYearFilter}.</td></tr>`}
+          </tbody>
+        </table>
+        <div style="margin-top: 25px; float: right; text-align: center; width: 220px; font-size: 10.5pt;">
+          <div>Kediri, ${format(new Date(), 'dd MMMM yyyy', { locale: id })}</div>
+          <div style="margin-top: 4px;">Kepala Tata Usaha / Petugas Agenda,</div>
+          <div style="height: 55px;"></div>
+          <div style="font-weight: bold; text-decoration: underline;">${config.adminName || 'Sekhudin, S.Pd.'}</div>
+          <div>NIP. ${config.adminNip || '197505122008011012'}</div>
+        </div>
+      </div>
+    `;
+
+    setPrintModalState({
+      isOpen: true,
+      title: `Buku Agenda Surat Keluar - Periode ${agendaYearFilter}`,
+      subtitle: `Menampilkan ${filteredAgendaList.length} nomor agenda surat keluar resmi`,
+      htmlContent: fullHtml
+    });
+  };
+
   // If not logged in, show dedicated Portal Login
   if (!session) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden bg-[#030712]">
+      <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden bg-[#030712]">
         {/* Background glow */}
         <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
           <div className="absolute -top-[20%] -left-[10%] w-[50vw] h-[50vw] rounded-full bg-indigo-600/20 blur-[130px]" />
@@ -576,13 +742,43 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
           <div className="absolute -bottom-[20%] left-[25%] w-[40vw] h-[40vw] rounded-full bg-sky-600/20 blur-[120px]" />
         </div>
 
+        {/* Top Quick Navigation Bar */}
+        <div className="relative z-10 w-full max-w-4xl mb-4 flex items-center justify-between px-2">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span className="text-xs font-bold text-emerald-400 font-mono">PORTAL 1</span>
+            <span className="text-slate-500 text-xs">•</span>
+            <span className="text-xs font-medium text-slate-300 font-mono">LAYANAN DRAF GURU & WALI</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={generateFullUserManualPdf}
+              className="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+              title="Unduh Buku Panduan Lengkap PDF"
+            >
+              <FileDown className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Panduan PDF</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsAdminPinModalOpen(true)}
+              className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-indigo-500/20 hover:from-amber-500/30 hover:to-indigo-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
+              title="Masuk ke Portal 2: Dasbor Admin TU menggunakan PIN"
+            >
+              <Lock className="w-3.5 h-3.5 text-amber-400" />
+              <span>Portal 2: Admin TU (PIN)</span>
+            </button>
+          </div>
+        </div>
+
         <div className="relative z-10 w-full max-w-4xl flex flex-col lg:flex-row items-stretch gap-8">
           {/* Left panel: Info & Explanation */}
           <div className="lg:w-1/2 bg-gradient-to-br from-slate-900/90 to-slate-800/80 border border-slate-700/70 rounded-2xl p-8 flex flex-col justify-between shadow-2xl backdrop-blur-xl">
             <div>
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs font-semibold mb-6">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>PORTAL LAYANAN PERSURATAN</span>
+                <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="font-bold">PORTAL 1: LAYANAN PERSURATAN MANDIRI</span>
               </div>
 
               <h1 className="text-3xl font-bold text-white tracking-tight leading-tight mb-3">
@@ -629,10 +825,14 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
 
             <div className="pt-8 border-t border-slate-700/50 mt-6 flex items-center justify-between text-xs text-slate-400">
               <span>SMP Negeri 3 Kras, Kediri</span>
-              <Link to="/login" className="text-indigo-400 hover:text-indigo-300 underline font-medium flex items-center gap-1">
-                <span>Login Admin TU</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </Link>
+              <button 
+                type="button"
+                onClick={() => setIsAdminPinModalOpen(true)}
+                className="text-amber-400 hover:text-amber-300 font-semibold flex items-center gap-1.5 transition-colors"
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+                <span>Masuk ke Portal 2 (Admin TU via PIN)</span>
+              </button>
             </div>
           </div>
 
@@ -780,6 +980,16 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
             </div>
           </div>
         </div>
+
+        {/* Admin PIN Quick Login Modal */}
+        <AdminPinModal
+          isOpen={isAdminPinModalOpen}
+          onClose={() => setIsAdminPinModalOpen(false)}
+          onSuccess={() => {
+            setIsAdminPinModalOpen(false);
+            navigate('/admin');
+          }}
+        />
       </div>
     );
   }
@@ -799,7 +1009,10 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-base font-bold text-white tracking-tight">Portal Persuratan Mandiri</h1>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                  PORTAL 1
+                </span>
+                <h1 className="text-base font-bold text-white tracking-tight">Layanan Draf Surat Guru & Wali Murid</h1>
                 <span className={cn(
                   "text-[10px] uppercase font-bold px-2 py-0.5 rounded-full border",
                   session.role === 'guru' ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/30" : "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
@@ -807,7 +1020,7 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
                   {session.role === 'guru' ? 'Guru / Tendik' : 'Wali Murid'}
                 </span>
               </div>
-              <p className="text-xs text-slate-400">SMP Negeri 3 Kras • Hasil draf diverifikasi oleh Akun Admin Tata Usaha</p>
+              <p className="text-xs text-slate-400">SMP Negeri 3 Kras • Draf diverifikasi & diregister oleh Petugas Admin TU</p>
             </div>
           </div>
 
@@ -819,6 +1032,36 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
                 <span>{session.phone}</span>
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={generateFullUserManualPdf}
+              className="p-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all flex items-center gap-1.5 text-xs font-semibold shadow-sm"
+              title="Unduh Buku Panduan Lengkap PDF"
+            >
+              <FileDown className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="hidden sm:inline">Panduan PDF</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsCanvaModalOpen(true)}
+              className="p-2 px-3 rounded-xl bg-gradient-to-r from-sky-600/90 to-indigo-600/90 hover:from-sky-500 hover:to-indigo-500 text-white border border-sky-400/40 transition-all flex items-center gap-1.5 text-xs font-bold shadow-md shadow-sky-900/30"
+              title="Buka Desain Poster & Panduan Canva (Langkah Akses & Nomor Agenda)"
+            >
+              <Palette className="w-4 h-4 text-amber-300" />
+              <span className="hidden sm:inline">Desain Poster & Canva</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsAdminPinModalOpen(true)}
+              className="p-2 px-3 rounded-xl bg-gradient-to-r from-amber-500/20 to-indigo-500/20 hover:from-amber-500/30 hover:to-indigo-500/30 text-amber-300 border border-amber-500/40 transition-all flex items-center gap-1.5 text-xs font-bold shadow-sm"
+              title="Beralih ke Portal 2: Dasbor Admin TU menggunakan PIN"
+            >
+              <Lock className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">Portal 2: Admin TU (PIN)</span>
+            </button>
 
             <button
               onClick={handleLogout}
@@ -849,7 +1092,7 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
           </div>
 
           {/* Navigation Pill Tabs */}
-          <div className="flex items-center gap-2 bg-slate-950/80 p-1.5 rounded-xl border border-slate-800 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 bg-slate-950/80 p-1.5 rounded-xl border border-slate-800 shrink-0">
             <button
               onClick={() => setActiveTab('buat_draf')}
               className={cn(
@@ -879,12 +1122,75 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
                 </span>
               )}
             </button>
+            <button
+              onClick={() => setActiveTab('registrasi_agenda')}
+              className={cn(
+                "px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 relative",
+                activeTab === 'registrasi_agenda'
+                  ? "bg-sky-600 text-white shadow-md shadow-sky-600/30"
+                  : "text-slate-400 hover:text-slate-200"
+              )}
+            >
+              <Hash className="w-3.5 h-3.5 text-sky-400" />
+              <span>Registrasi Nomor Agenda</span>
+              <span className="px-1.5 py-0.5 rounded-full bg-sky-400/20 text-[10px] font-mono font-bold text-sky-300 border border-sky-400/30">
+                #{outboxAgenda.formattedNext}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsQuickAgendaModalOpen(true)}
+              className="px-3.5 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+              title="Untuk guru yang hanya meminta nomor agenda saja tanpa membuat draf di sistem"
+            >
+              <Tag className="w-3.5 h-3.5 text-amber-400" />
+              <span>Minta Nomor Agenda Saja</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsCanvaModalOpen(true)}
+              className="px-3.5 py-2 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/40 text-sky-300 hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+              title="Lihat desain poster panduan infografis siap cetak dan template Canva"
+            >
+              <Palette className="w-3.5 h-3.5 text-sky-400" />
+              <span>Poster Panduan</span>
+            </button>
           </div>
         </div>
 
         {/* VIEW 1: BUAT DRAF SURAT */}
         {activeTab === 'buat_draf' && (
           <div className="space-y-6">
+            {/* Fast Booking Info Box for Teachers who only need agenda number */}
+            <div className="p-3.5 rounded-xl bg-gradient-to-r from-amber-950/40 via-slate-900/80 to-amber-950/30 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-sm">
+              <div className="flex items-start sm:items-center gap-2.5 text-amber-200">
+                <div className="p-2 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">
+                  <Tag className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-bold text-white flex items-center gap-2">
+                    <span>Hanya Membutuhkan Nomor Agenda Surat Saja?</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono">
+                      Next: #{outboxAgenda.formattedNext}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 mt-0.5">
+                    Bagi bapak/ibu guru yang menyusun naskah mandiri di Word/Docs dan hanya butuh nomor agenda keluar resmi sekolah.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsQuickAgendaModalOpen(true)}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shrink-0 transition-all shadow-md shadow-amber-500/20 flex items-center gap-1.5"
+              >
+                <Zap className="w-3.5 h-3.5 fill-slate-950" />
+                <span>Ambil Nomor Agenda Saja</span>
+              </button>
+            </div>
+
             {/* Step 1: Template Selection Cards */}
             <div>
               <div className="flex items-center justify-between mb-3">
@@ -968,6 +1274,189 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
                 </div>
 
                 <form onSubmit={handleGenerateAndSubmitDraft} className="space-y-5">
+                  {/* MENU REGISTRASI NOMOR AGENDA SURAT OTOMATIS */}
+                  <div className="p-4.5 rounded-xl bg-gradient-to-br from-[#0C152B] via-[#0F1B36] to-[#0A1224] border border-sky-500/40 shadow-xl space-y-3.5 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-44 h-44 bg-sky-500/10 rounded-full blur-3xl pointer-events-none" />
+                    
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-sky-500/20 pb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-sky-500/20 border border-sky-500/40 text-sky-400 flex items-center justify-center font-bold shadow-md shadow-sky-500/20">
+                          <Hash className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h4 className="text-sm font-bold text-white tracking-wide">Menu Registrasi Nomor Agenda Surat Otomatis</h4>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Aktif Meneruskan Agenda
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-300">
+                            Sistem secara otomatis menetapkan nomor urut agenda keluar meneruskan nomor agenda surat sebelumnya
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                        <button
+                          type="button"
+                          onClick={() => setIsQuickAgendaModalOpen(true)}
+                          className="text-xs text-amber-300 hover:text-white flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 transition-all shadow-sm font-bold"
+                          title="Hanya perlu nomor agenda keluar saja tanpa membuat draf dokumen di sistem"
+                        >
+                          <Tag className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Minta Nomor Saja</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('registrasi_agenda')}
+                          className="text-xs text-sky-300 hover:text-white flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/40 transition-all shadow-sm font-medium"
+                        >
+                          <BookOpen className="w-3.5 h-3.5 text-sky-400" />
+                          <span>Buka Buku Agenda</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowAgendaSettings(!showAgendaSettings)}
+                          className="text-xs text-slate-300 hover:text-white flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 transition-all shadow-sm"
+                        >
+                          <Settings2 className="w-3.5 h-3.5" />
+                          <span>{showAgendaSettings ? 'Tutup' : 'Sesuaikan'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Visual Comparison: Agenda Sebelumnya -> Agenda Baru */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                      {/* Kartu 1: Agenda Sebelumnya */}
+                      <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-700/70 flex items-center gap-3 shadow-sm">
+                        <div className="w-11 h-11 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30 flex flex-col items-center justify-center shrink-0">
+                          <span className="text-[9px] font-mono uppercase text-amber-400/90 font-bold">Terakhir</span>
+                          <span className="text-sm font-mono font-bold leading-none">#{outboxAgenda.formattedLast}</span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Nomor Agenda Surat Sebelumnya</div>
+                          <div className="text-xs font-mono font-bold text-slate-200 truncate mt-0.5">
+                            {outboxAgenda.lastLetter?.referenceNumber || 'Belum ada surat keluar terdaftar'}
+                          </div>
+                          <div className="text-[11px] text-slate-400 truncate">
+                            {outboxAgenda.lastLetter?.title || 'Register awal buku agenda surat keluar'}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Kartu 2: Agenda Baru Otomatis */}
+                      <div className="p-3.5 rounded-xl bg-gradient-to-r from-sky-950/60 to-indigo-950/60 border border-sky-500/50 flex items-center gap-3 shadow-md shadow-sky-950/30">
+                        <div className="w-11 h-11 rounded-xl bg-sky-500/25 text-sky-300 border border-sky-500/50 flex flex-col items-center justify-center shrink-0">
+                          <span className="text-[9px] font-mono uppercase text-sky-400 font-bold">Baru</span>
+                          <span className="text-sm font-mono font-bold leading-none">#{effectiveSeq}</span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[10px] text-sky-400 uppercase font-bold flex items-center gap-1.5 tracking-wider">
+                            <span>Nomor Agenda Otomatis Berikutnya</span>
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                          </div>
+                          <div className="text-xs font-mono font-bold text-sky-200 truncate mt-0.5">
+                            {previewOfficialRef}
+                          </div>
+                          <div className="text-[11px] text-emerald-300 font-medium flex items-center gap-1">
+                            <span>✓ Meneruskan otomatis dari agenda #{outboxAgenda.formattedLast}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Format Kode Klasifikasi Cepat */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-sky-500/20 text-xs">
+                      <span className="text-[11px] text-slate-400 font-semibold flex items-center gap-1 mr-1">
+                        <span>Pilihan Format Otomatis:</span>
+                      </span>
+                      {[
+                        { label: 'Surat Tugas (420.3)', code: '420.3' },
+                        { label: 'Keterangan Siswa (421)', code: '421' },
+                        { label: 'Legalisir Dokumen (421.7)', code: '421.7' },
+                        { label: 'Pindah Sekolah (421.5)', code: '421.5' },
+                        { label: 'Rekomendasi (422.5)', code: '422.5' },
+                        { label: 'Izin Pegawai (800)', code: '800' },
+                      ].map((preset) => (
+                        <button
+                          key={preset.code}
+                          type="button"
+                          onClick={() => {
+                            setCustomClassificationCode(preset.code);
+                            toast.success(`Format klasifikasi ${preset.code} diterapkan ke nomor surat.`);
+                          }}
+                          className={cn(
+                            "px-2.5 py-1 rounded-lg text-[11px] font-mono transition-all border",
+                            effectiveClassificationCode === preset.code
+                              ? "bg-sky-500/25 text-sky-200 border-sky-400 font-bold shadow-sm"
+                              : "bg-slate-900/60 text-slate-400 border-slate-700/80 hover:text-slate-200 hover:border-slate-600"
+                          )}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Form Penyesuaian Agenda & Kode Klasifikasi (Opsional) */}
+                    {showAgendaSettings && (
+                      <div className="p-3.5 rounded-xl bg-slate-900/90 border border-indigo-500/40 space-y-3 pt-3">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-medium text-slate-200 flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={useAutoAgenda}
+                              onChange={(e) => setUseAutoAgenda(e.target.checked)}
+                              className="rounded border-slate-700 bg-slate-800 text-sky-500 focus:ring-sky-500"
+                            />
+                            <span>Gunakan Penomoran Otomatis Berurutan (Direkomendasikan)</span>
+                          </label>
+                          {!useAutoAgenda && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setUseAutoAgenda(true);
+                                setManualAgendaSeq('');
+                              }}
+                              className="text-[11px] text-amber-400 hover:text-amber-300 flex items-center gap-1 font-semibold"
+                            >
+                              <RotateCcw className="w-3 h-3" /> Reset ke Otomatis
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[11px] font-semibold text-slate-300 mb-1 block">Nomor Urut Agenda (3 Digit)</label>
+                            <input
+                              type="text"
+                              disabled={useAutoAgenda}
+                              value={useAutoAgenda ? outboxAgenda.formattedNext : manualAgendaSeq}
+                              onChange={(e) => setManualAgendaSeq(e.target.value)}
+                              placeholder={outboxAgenda.formattedNext}
+                              className="w-full bg-[#0B1120] border border-slate-700 focus:border-sky-500 disabled:opacity-60 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none font-mono"
+                            />
+                            <p className="text-[10px] text-slate-500 mt-1">
+                              {useAutoAgenda ? `Otomatis bernomor #${outboxAgenda.formattedNext}` : 'Masukkan nomor urut agenda khusus manual'}
+                            </p>
+                          </div>
+                          <div>
+                            <label className="text-[11px] font-semibold text-slate-300 mb-1 block">Kode Klasifikasi Surat</label>
+                            <input
+                              type="text"
+                              value={effectiveClassificationCode}
+                              onChange={(e) => setCustomClassificationCode(e.target.value)}
+                              placeholder={currentTemplateClassification.code}
+                              className="w-full bg-[#0B1120] border border-slate-700 focus:border-sky-500 rounded-lg px-3 py-2 text-xs text-slate-200 outline-none font-mono"
+                            />
+                            <p className="text-[10px] text-slate-500 mt-1">
+                              Standar template: {currentTemplateClassification.code} ({currentTemplateClassification.unit})
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                     {/* Judul / Perihal */}
                     <div className="space-y-1.5 lg:col-span-2">
@@ -1207,9 +1696,11 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
 
                   {/* Submit Actions */}
                   <div className="pt-4 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <div className="text-xs text-slate-400 flex items-center gap-2">
+                    <div className="text-xs text-slate-300 flex items-center gap-2">
                       <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                      <span>Draf surat otomatis tersimpan di database dan langsung diverifikasi Admin TU.</span>
+                      <span>
+                        Draf otomatis diregistrasi dengan <strong className="text-sky-300 font-mono">No. Agenda #{effectiveSeq}</strong> (meneruskan #{outboxAgenda.formattedLast}) dan diverifikasi Admin TU.
+                      </span>
                     </div>
 
                     <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -1233,7 +1724,9 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
                         )}
                       >
                         <Download className="w-4 h-4" />
-                        <span>{isSubmitting ? 'Memproses Draf...' : 'Buat Draf & Unduh PDF Resmi'}</span>
+                        <span>
+                          {isSubmitting ? 'Mendaftarkan Agenda...' : `Kirim Permohonan (Agenda #${effectiveSeq})`}
+                        </span>
                       </button>
                     </div>
                   </div>
@@ -1459,6 +1952,368 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
             )}
           </div>
         )}
+
+        {/* VIEW 3: BUKU REGISTER & REGISTRASI NOMOR AGENDA SURAT KELUAR OTOMATIS */}
+        {activeTab === 'registrasi_agenda' && (
+          <div className="space-y-6">
+            {/* Header section with actions */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/80 border border-slate-800 p-5 rounded-2xl">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Hash className="w-5 h-5 text-sky-400" />
+                  <span>Buku Register & Penomoran Agenda Surat Keluar Otomatis</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-1 max-w-2xl">
+                  Memonitor urutan nomor agenda surat keluar sekolah secara berkesinambungan. Sistem otomatis meneruskan nomor agenda surat sebelumnya untuk setiap pengajuan surat resmi baru.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsQuickAgendaModalOpen(true)}
+                  className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-amber-500/20 transition-all"
+                  title="Ambil nomor agenda saja untuk keperluan persuratan mandiri"
+                >
+                  <Tag className="w-4 h-4 text-slate-950" />
+                  <span>Minta Nomor Agenda Saja</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handlePrintBukuAgenda}
+                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-2 border border-slate-700 transition-all shadow-sm"
+                >
+                  <Printer className="w-4 h-4 text-sky-400" />
+                  <span>Cetak Buku Agenda</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleStartDraftWithAgenda()}
+                  className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-sky-600/30 transition-all"
+                >
+                  <FilePlus className="w-4 h-4" />
+                  <span>Buat Pengajuan (Agenda #{outboxAgenda.formattedNext})</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Visual Continuity Chain: Agenda Terakhir -> Meneruskan Otomatis -> Agenda Baru */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Card 1: Agenda Surat Sebelumnya Terakhir Digunakan */}
+              <div className="p-4 rounded-2xl bg-gradient-to-b from-slate-900/90 to-slate-950/90 border border-amber-500/30 shadow-md relative overflow-hidden flex flex-col justify-between">
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold tracking-wider uppercase text-amber-400">
+                      Agenda Terakhir Digunakan
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono font-bold text-xs border border-amber-500/30">
+                      #{outboxAgenda.formattedLast}
+                    </span>
+                  </div>
+                  <div>
+                    <div className="text-xs font-mono font-bold text-slate-200 break-all">
+                      {outboxAgenda.lastLetter?.referenceNumber || 'Belum ada surat keluar terdaftar'}
+                    </div>
+                    <div className="text-xs text-slate-400 mt-1 line-clamp-2">
+                      {outboxAgenda.lastLetter?.title || 'Register awal buku agenda surat keluar'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-3 mt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+                  <span>Tanggal:</span>
+                  <span className="text-slate-300 font-medium">
+                    {outboxAgenda.lastLetter?.date ? format(new Date(outboxAgenda.lastLetter.date), 'dd MMMM yyyy', { locale: id }) : '-'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Card 2: Agenda Otomatis Berikutnya (Aktif / Meneruskan) */}
+              <div className="p-4 rounded-2xl bg-gradient-to-b from-sky-950/70 via-indigo-950/40 to-slate-950/90 border-2 border-sky-500/60 shadow-xl shadow-sky-950/40 relative overflow-hidden flex flex-col justify-between">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/10 rounded-full blur-2xl pointer-events-none" />
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold tracking-wider uppercase text-sky-400 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                      <span>Agenda Otomatis Berikutnya</span>
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-sky-500/30 text-sky-200 font-mono font-extrabold text-sm border border-sky-400/50 shadow-sm">
+                      #{outboxAgenda.formattedNext}
+                    </span>
+                  </div>
+                  <div>
+                    <div className="text-xs font-mono font-bold text-sky-200 break-all">
+                      {buildOfficialLetterNumber('420.3', outboxAgenda.formattedNext, '418.20.2.62.03', agendaYearFilter)}
+                    </div>
+                    <div className="text-[11px] text-emerald-300 font-medium mt-1 flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>Meneruskan berurutan (+1) dari #{outboxAgenda.formattedLast}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-3 mt-3 border-t border-sky-500/20 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsQuickAgendaModalOpen(true)}
+                    className="w-full py-1.5 px-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-md shadow-amber-500/20"
+                    title="Hanya butuh nomor agenda saja untuk naskah mandiri"
+                  >
+                    <Tag className="w-3.5 h-3.5" />
+                    <span>Ambil No. Saja</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleStartDraftWithAgenda()}
+                    className="w-full py-1.5 px-2.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold transition-all flex items-center justify-center gap-1 shadow-md shadow-sky-500/20"
+                  >
+                    <span>Buat Draf</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Card 3: Statistik Buku Agenda */}
+              <div className="p-4 rounded-2xl bg-gradient-to-b from-slate-900/90 to-slate-950/90 border border-slate-800 shadow-md flex flex-col justify-between">
+                <div>
+                  <div className="text-[10px] font-bold tracking-wider uppercase text-slate-400 mb-2">
+                    Rekap Agenda Periode {agendaYearFilter}
+                  </div>
+                  <div className="text-2xl font-extrabold text-white font-mono">
+                    {outboxAgendaList.length} <span className="text-xs font-normal text-slate-400 font-sans">Surat Keluar</span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Total surat resmi dan pengajuan tercatat di buku register agenda keluar tahun ini.
+                  </p>
+                </div>
+
+                <div className="pt-3 mt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
+                  <span className="text-emerald-400 font-medium">
+                    ✓ {outboxAgendaList.filter(x => x.submissionStatus === 'approved').length} Disetujui/Resmi
+                  </span>
+                  <span className="text-amber-400 font-medium">
+                    ⏳ {outboxAgendaList.filter(x => x.submissionStatus !== 'approved').length} Draf Pengajuan
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Filter & Search Toolbar */}
+            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+              {/* Search input */}
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={agendaSearchQuery}
+                  onChange={(e) => setAgendaSearchQuery(e.target.value)}
+                  placeholder="Cari perihal, nomor surat, nomor agenda (#024), pemohon, atau penerima..."
+                  className="w-full bg-[#0B1120] border border-slate-700/80 focus:border-sky-500 rounded-xl pl-9 pr-8 py-2 text-xs text-slate-200 outline-none transition-colors"
+                />
+                {agendaSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setAgendaSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+
+              {/* Status and Year Filter */}
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                {/* Status Pills */}
+                <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setAgendaStatusFilter('all')}
+                    className={cn(
+                      "px-2.5 py-1 rounded-lg font-medium transition-all",
+                      agendaStatusFilter === 'all'
+                        ? "bg-sky-600 text-white font-bold"
+                        : "text-slate-400 hover:text-slate-200"
+                    )}
+                  >
+                    Semua ({outboxAgendaList.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAgendaStatusFilter('approved')}
+                    className={cn(
+                      "px-2.5 py-1 rounded-lg font-medium transition-all",
+                      agendaStatusFilter === 'approved'
+                        ? "bg-emerald-600 text-white font-bold"
+                        : "text-slate-400 hover:text-slate-200"
+                    )}
+                  >
+                    Resmi ({outboxAgendaList.filter(x => x.submissionStatus === 'approved').length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAgendaStatusFilter('pending')}
+                    className={cn(
+                      "px-2.5 py-1 rounded-lg font-medium transition-all",
+                      agendaStatusFilter === 'pending'
+                        ? "bg-amber-600 text-white font-bold"
+                        : "text-slate-400 hover:text-slate-200"
+                    )}
+                  >
+                    Draf ({outboxAgendaList.filter(x => x.submissionStatus !== 'approved').length})
+                  </button>
+                </div>
+
+                {/* Year Select */}
+                <select
+                  value={agendaYearFilter}
+                  onChange={(e) => setAgendaYearFilter(Number(e.target.value))}
+                  className="bg-slate-950 border border-slate-800 text-xs text-slate-300 rounded-xl px-3 py-2 outline-none font-mono focus:border-sky-500"
+                >
+                  <option value={new Date().getFullYear()}>Tahun {new Date().getFullYear()}</option>
+                  <option value={new Date().getFullYear() - 1}>Tahun {new Date().getFullYear() - 1}</option>
+                  <option value={new Date().getFullYear() - 2}>Tahun {new Date().getFullYear() - 2}</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Interactive Data Table of Registered Outbox Agenda */}
+            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-800 bg-slate-950/90 text-slate-400 font-semibold uppercase text-[10px] tracking-wider">
+                      <th className="py-3.5 px-4 w-24">No. Agenda</th>
+                      <th className="py-3.5 px-4 w-52">Nomor Surat Resmi</th>
+                      <th className="py-3.5 px-4 w-28">Tanggal</th>
+                      <th className="py-3.5 px-4 min-w-[200px]">Perihal / Judul Surat</th>
+                      <th className="py-3.5 px-4 w-44">Tujuan / Instansi</th>
+                      <th className="py-3.5 px-4 w-36">Pemohon / Pengusul</th>
+                      <th className="py-3.5 px-4 w-32">Status Dokumen</th>
+                      <th className="py-3.5 px-4 w-28 text-center">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {filteredAgendaList.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-12 px-4 text-center text-slate-500">
+                          <FileText className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                          <p className="font-semibold text-slate-400">Tidak ada nomor agenda surat keluar yang cocok</p>
+                          <p className="text-xs text-slate-500 mt-0.5">Coba ubah kata kunci pencarian atau filter status dokumen.</p>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredAgendaList.map((item) => {
+                        const isApproved = item.submissionStatus === 'approved';
+                        const isLatest = item.formattedSeq === outboxAgenda.formattedLast;
+                        return (
+                          <tr key={item.id} className="hover:bg-slate-800/40 transition-colors">
+                            {/* No. Agenda */}
+                            <td className="py-3.5 px-4">
+                              <div className="flex items-center gap-1.5">
+                                <span className={cn(
+                                  "font-mono font-bold px-2 py-0.5 rounded-md text-xs border",
+                                  isLatest
+                                    ? "bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm"
+                                    : "bg-slate-800/80 text-slate-200 border-slate-700"
+                                )}>
+                                  #{item.formattedSeq}
+                                </span>
+                                {isLatest && (
+                                  <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" title="Agenda Terakhir Terdaftar" />
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Nomor Surat Resmi */}
+                            <td className="py-3.5 px-4">
+                              <span className="font-mono font-medium text-slate-200 block truncate max-w-[200px]" title={item.referenceNumber}>
+                                {item.referenceNumber}
+                              </span>
+                            </td>
+
+                            {/* Tanggal */}
+                            <td className="py-3.5 px-4 text-slate-400 whitespace-nowrap">
+                              {item.date ? format(new Date(item.date), 'dd/MM/yyyy') : '-'}
+                            </td>
+
+                            {/* Perihal / Judul Surat */}
+                            <td className="py-3.5 px-4">
+                              <div className="font-medium text-white line-clamp-2" title={item.title}>
+                                {item.title}
+                              </div>
+                            </td>
+
+                            {/* Tujuan */}
+                            <td className="py-3.5 px-4 text-slate-300">
+                              <span className="block truncate max-w-[160px]" title={item.senderOrRecipient}>
+                                {item.senderOrRecipient || '-'}
+                              </span>
+                            </td>
+
+                            {/* Pemohon */}
+                            <td className="py-3.5 px-4">
+                              <div className="text-slate-300 font-medium truncate max-w-[130px]" title={item.applicantName || 'Tata Usaha'}>
+                                {item.applicantName || 'Tata Usaha'}
+                              </div>
+                              {item.applicantRole && (
+                                <span className="text-[10px] text-slate-500 capitalize">
+                                  {item.applicantRole === 'guru' ? 'Tenaga Guru' : 'Wali Murid'}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Status */}
+                            <td className="py-3.5 px-4 whitespace-nowrap">
+                              {isApproved ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                  <span>Resmi / Disetujui</span>
+                                </span>
+                              ) : item.isDraft ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                                  <Clock className="w-3 h-3 text-amber-400" />
+                                  <span>Draf Menunggu</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                                  <span>Aktif</span>
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Aksi */}
+                            <td className="py-3.5 px-4 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handlePreviewCurrentLetter(item.letter, 'permohonan')}
+                                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-all"
+                                  title="Pratinjau Surat Permohonan"
+                                >
+                                  <Eye className="w-3.5 h-3.5 text-sky-400" />
+                                </button>
+                                {isApproved && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handlePreviewCurrentLetter(item.letter, 'resmi')}
+                                    className="p-1.5 rounded-lg bg-emerald-950/60 hover:bg-emerald-900 text-emerald-300 hover:text-white border border-emerald-500/40 transition-all"
+                                    title="Pratinjau Surat Resmi Sekolah"
+                                  >
+                                    <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Footer info */}
@@ -1467,6 +2322,25 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
           Layanan Tata Usaha Mandiri • SMP Negeri 3 Kras, Kab. Kediri &copy; {new Date().getFullYear()} • Hasil draf disimpan dan dikelola terpusat oleh Petugas Tata Usaha.
         </p>
       </footer>
+
+      {/* Quick Agenda Only Modal */}
+      <QuickAgendaModal
+        isOpen={isQuickAgendaModalOpen}
+        onClose={() => setIsQuickAgendaModalOpen(false)}
+        defaultApplicantName={session?.name || ''}
+        defaultApplicantPhone={session?.phone || ''}
+        defaultApplicantRole={session?.role || 'guru'}
+        userRole={session?.role || 'guru'}
+        onSuccess={() => {
+          // Toast or any other feedback handled inside modal
+        }}
+      />
+
+      {/* Canva Poster & Guide Modal */}
+      <CanvaPosterModal
+        isOpen={isCanvaModalOpen}
+        onClose={() => setIsCanvaModalOpen(false)}
+      />
 
       {/* Print Preview Modal */}
       <PrintPreviewModal
@@ -1477,6 +2351,16 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
         htmlContent={printModalState.htmlContent}
         onDownloadPdf={printModalState.onDownloadPdf}
         onDownloadWord={printModalState.onDownloadWord}
+      />
+
+      {/* Admin PIN Quick Login Modal */}
+      <AdminPinModal
+        isOpen={isAdminPinModalOpen}
+        onClose={() => setIsAdminPinModalOpen(false)}
+        onSuccess={() => {
+          setIsAdminPinModalOpen(false);
+          navigate('/admin');
+        }}
       />
     </div>
   );

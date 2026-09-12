@@ -2967,3 +2967,103 @@ export async function generateCombinedDraftPDF(letter: Letter, cfg?: SchoolConfi
   doc.save(`Paket_Lengkap_Permohonan_dan_Surat_Resmi_${cleanTitle}.pdf`);
 }
 
+/**
+ * Menghasilkan HTML Slip Tanda Terima / Bukti Registrasi Nomor Agenda Surat Keluar
+ */
+export function generateAgendaSlipHTML(letter: Letter, applicantNip?: string): string {
+  const config = getSchoolConfig();
+  const kopHtml = renderOfficialKopHTML(config, false);
+  const docDate = letter.documentDate || letter.date || new Date().toISOString().split('T')[0];
+  const formattedDate = format(new Date(docDate), 'dd MMMM yyyy', { locale: id });
+  const printDate = format(new Date(), 'dd MMMM yyyy, HH:mm', { locale: id });
+
+  const seq = letter.sequenceNumber || (letter.referenceNumber.match(/\/(?:DRAF-)?(\d{1,4})\//)?.[1]?.padStart(3, '0') || '000');
+
+  return `
+    <div style="font-family: 'Times New Roman', Times, serif; color: #0f172a; padding: 24px; max-width: 650px; margin: 0 auto; background: #fff; border: 1px dashed #94a3b8;">
+      ${kopHtml}
+      <div style="text-align: center; margin: 18px 0 16px 0; border-bottom: 2px solid #0f172a; padding-bottom: 8px;">
+        <h3 style="margin: 0; font-size: 13pt; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px;">
+          BUKTI REGISTRASI NOMOR AGENDA SURAT KELUAR
+        </h3>
+        <p style="margin: 4px 0 0 0; font-size: 9.5pt; color: #475569;">
+          Tata Usaha SMP Negeri 3 Kras Kediri • Dicetak pada ${printDate} WIB
+        </p>
+      </div>
+
+      <!-- Badge Nomor Agenda & Nomor Surat -->
+      <div style="background-color: #f8fafc; border: 2px solid #0284c7; border-radius: 8px; padding: 14px 18px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <span style="font-size: 9pt; color: #0369a1; text-transform: uppercase; font-weight: bold; display: block;">NOMOR AGENDA RESMI</span>
+          <span style="font-size: 20pt; font-family: monospace; font-weight: bold; color: #0369a1;">#${seq}</span>
+        </div>
+        <div style="text-align: right;">
+          <span style="font-size: 9pt; color: #475569; text-transform: uppercase; font-weight: bold; display: block;">NOMOR SURAT KELUAR</span>
+          <span style="font-size: 12pt; font-family: monospace; font-weight: bold; color: #0f172a;">${letter.referenceNumber}</span>
+        </div>
+      </div>
+
+      <table style="width: 100%; border-collapse: collapse; font-size: 10.5pt; margin-bottom: 16px;">
+        <tbody>
+          <tr>
+            <td style="width: 170px; padding: 6px 0; vertical-align: top; color: #334155;">Perihal / Keperluan</td>
+            <td style="width: 15px; padding: 6px 0; vertical-align: top;">:</td>
+            <td style="padding: 6px 0; vertical-align: top; font-weight: bold; color: #0f172a;">${letter.title}</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; vertical-align: top; color: #334155;">Nama Pemohon / Guru</td>
+            <td style="padding: 6px 0; vertical-align: top;">:</td>
+            <td style="padding: 6px 0; vertical-align: top; font-weight: bold;">${letter.applicantName || 'Guru / Tenaga Pendidik'}</td>
+          </tr>
+          ${applicantNip ? `
+          <tr>
+            <td style="padding: 6px 0; vertical-align: top; color: #334155;">NIP / NUPTK</td>
+            <td style="padding: 6px 0; vertical-align: top;">:</td>
+            <td style="padding: 6px 0; vertical-align: top; font-family: monospace;">${applicantNip}</td>
+          </tr>` : ''}
+          <tr>
+            <td style="padding: 6px 0; vertical-align: top; color: #334155;">Tujuan / Penerima</td>
+            <td style="padding: 6px 0; vertical-align: top;">:</td>
+            <td style="padding: 6px 0; vertical-align: top;">${letter.addressedTo || letter.senderOrRecipient || '-'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; vertical-align: top; color: #334155;">Tanggal Surat</td>
+            <td style="padding: 6px 0; vertical-align: top;">:</td>
+            <td style="padding: 6px 0; vertical-align: top;">${formattedDate}</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; vertical-align: top; color: #334155;">Status Registrasi</td>
+            <td style="padding: 6px 0; vertical-align: top;">:</td>
+            <td style="padding: 6px 0; vertical-align: top; color: #047857; font-weight: bold;">
+              ✓ Resmi Terdaftar di Buku Register Agenda Keluar Sekolah
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div style="background-color: #fefce8; border: 1px solid #fde047; border-radius: 6px; padding: 10px 14px; font-size: 9pt; color: #713f12; margin-bottom: 24px; line-height: 1.4;">
+        <b>Catatan Penggunaan:</b> Naskah fisik / digital surat dinas dibuat mandiri oleh guru/pemohon dengan mencantumkan Nomor Surat resmi di atas. Harap menyerahkan 1 rangkap tembusan naskah fisik ke Tata Usaha setelah ditandatangani.
+      </div>
+
+      <table style="width: 100%; margin-top: 10px; font-size: 10pt;">
+        <tr>
+          <td style="width: 50%; text-align: center; vertical-align: top;">
+            <div>Pemohon / Guru,</div>
+            <div style="height: 55px;"></div>
+            <div style="font-weight: bold; text-decoration: underline;">${letter.applicantName || 'Guru Pemohon'}</div>
+            ${applicantNip ? `<div>NIP. ${applicantNip}</div>` : ''}
+          </td>
+          <td style="width: 50%; text-align: center; vertical-align: top;">
+            <div>Kediri, ${formattedDate}</div>
+            <div>Petugas Agenda / Tata Usaha,</div>
+            <div style="height: 55px;"></div>
+            <div style="font-weight: bold; text-decoration: underline;">${config.adminName || 'Sekhudin, S.Pd.'}</div>
+            <div>NIP. ${config.adminNip || '197505122008011012'}</div>
+          </td>
+        </tr>
+      </table>
+    </div>
+  `;
+}
+
+

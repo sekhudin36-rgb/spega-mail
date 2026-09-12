@@ -1,16 +1,37 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Mail, KeyRound, LogIn, Sparkles, ShieldCheck, Zap, User, Phone, Users, Briefcase, ChevronRight, ArrowRight } from 'lucide-react';
+import { 
+  Mail, 
+  KeyRound, 
+  LogIn, 
+  Sparkles, 
+  ShieldCheck, 
+  Zap, 
+  User, 
+  Phone, 
+  Users, 
+  Briefcase, 
+  ChevronRight, 
+  ArrowRight,
+  Eye,
+  EyeOff,
+  ExternalLink,
+  Lock
+} from 'lucide-react';
 import { useNavigate, Navigate, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { cn } from '../lib/utils';
 import { addSystemLog } from '../lib/db';
+import { loginAdminWithPin, getAdminPin } from '../lib/authHelper';
 
 export default function Login() {
   const [appName, setAppName] = useState('SPEGA MAIL');
   const [activeTab, setActiveTab] = useState<'admin' | 'guru_wali'>('admin');
   
   // Admin form
+  const [adminLoginMode, setAdminLoginMode] = useState<'pin' | 'credentials'>('pin');
+  const [adminPinInput, setAdminPinInput] = useState('');
+  const [showPinInput, setShowPinInput] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -31,12 +52,29 @@ export default function Login() {
   const isGuestAuthenticated = sessionStorage.getItem('isGuestAuthenticated') === 'true';
 
   if (isAuthenticated) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/admin" replace />;
   }
 
   if (isGuestAuthenticated) {
-    return <Navigate to="/portal-guru-wali" replace />;
+    return <Navigate to="/" replace />;
   }
+
+  const handleAdminPinLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adminPinInput || adminPinInput.length < 4) {
+      setError('PIN minimal 4 digit angka.');
+      return;
+    }
+
+    const result = loginAdminWithPin(adminPinInput);
+    if (result.success) {
+      toast.success(result.message);
+      navigate('/admin', { replace: true });
+    } else {
+      setError(result.message);
+      setAdminPinInput('');
+    }
+  };
 
   const handleAdminLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,7 +97,7 @@ export default function Login() {
       });
 
       toast.success('Login Admin Tata Usaha Berhasil!');
-      navigate('/', { replace: true });
+      navigate('/admin', { replace: true });
     } else {
       addSystemLog({
         action: 'LOGIN_GAGAL',
@@ -104,7 +142,7 @@ export default function Login() {
     });
 
     toast.success(`Selamat datang, ${sessionObj.name}! Mengarahkan ke Portal Draf Surat...`);
-    navigate('/portal-guru-wali', { replace: true });
+    navigate('/', { replace: true });
   };
 
   return (
@@ -359,73 +397,194 @@ export default function Login() {
 
             {/* TAB 2: ADMIN LOGIN FORM */}
             {activeTab === 'admin' && (
-              <motion.form 
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                onSubmit={handleAdminLogin} 
-                className="space-y-4 relative z-10"
-              >
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-300">Username Petugas TU</label>
-                  <div className="relative group/input">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500 group-focus-within/input:text-indigo-400 transition-colors">
-                      <Mail className="h-4 w-4" />
-                    </div>
-                    <input 
-                      type="text" 
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      className="w-full bg-[#0F172A] border border-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg pl-10 pr-3 py-2.5 text-xs text-slate-200 placeholder:text-slate-500 transition-all outline-none" 
-                      placeholder="Username admin (bawaan: admin)"
-                      required
-                    />
-                  </div>
-                </div>
-                
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-medium text-slate-300">Kata Sandi</label>
-                  </div>
-                  <div className="relative group/input">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500 group-focus-within/input:text-indigo-400 transition-colors">
-                      <KeyRound className="h-4 w-4" />
-                    </div>
-                    <input 
-                      type="password" 
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full bg-[#0F172A] border border-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg pl-10 pr-3 py-2.5 text-xs text-slate-200 placeholder:text-slate-500 transition-all outline-none" 
-                      placeholder="•••••••• (bawaan: 123456)"
-                      required
-                    />
-                  </div>
+              <div className="space-y-4 relative z-10">
+                {/* Admin Sub-mode Switcher: PIN vs Credentials */}
+                <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-900/60 border border-slate-800 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => { setAdminLoginMode('pin'); setError(''); }}
+                    className={cn(
+                      "py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5",
+                      adminLoginMode === 'pin'
+                        ? "bg-indigo-600/30 border border-indigo-500 text-indigo-300 shadow-sm"
+                        : "text-slate-400 hover:text-slate-200 border border-transparent"
+                    )}
+                  >
+                    <KeyRound className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>PIN Cepat</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setAdminLoginMode('credentials'); setError(''); }}
+                    className={cn(
+                      "py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5",
+                      adminLoginMode === 'credentials'
+                        ? "bg-indigo-600/30 border border-indigo-500 text-indigo-300 shadow-sm"
+                        : "text-slate-400 hover:text-slate-200 border border-transparent"
+                    )}
+                  >
+                    <Mail className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Username & Sandi</span>
+                  </button>
                 </div>
 
-                <AnimatePresence>
-                  {error && (
-                    <motion.div 
-                      initial={{ opacity: 0, height: 0, y: -10 }} 
-                      animate={{ opacity: 1, height: 'auto', y: 0 }} 
-                      exit={{ opacity: 0, height: 0, y: -10 }}
-                      className="overflow-hidden"
-                    >
-                      <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 rounded-lg flex items-start gap-2 text-xs text-rose-400">
-                        <span>!</span>
-                        <p>{error}</p>
+                {/* Sub-mode 1: PIN Login */}
+                {adminLoginMode === 'pin' ? (
+                  <motion.form
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    onSubmit={handleAdminPinLogin}
+                    className="space-y-4"
+                  >
+                    <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-center">
+                      <p className="text-xs text-indigo-300 leading-relaxed font-medium">
+                        Masukkan <b>PIN Keamanan Admin</b> untuk langsung membuka dasbor tata usaha.
+                      </p>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block text-center">
+                        PIN Otorisasi Admin
+                      </label>
+                      <div className="relative max-w-[240px] mx-auto">
+                        <input
+                          type={showPinInput ? "text" : "password"}
+                          value={adminPinInput}
+                          onChange={(e) => setAdminPinInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                          className="w-full bg-[#0F172A] border border-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-xl py-3 text-center text-xl font-mono tracking-widest text-white font-bold placeholder:text-slate-600 outline-none"
+                          placeholder="••••"
+                          maxLength={6}
+                          autoFocus
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPinInput(!showPinInput)}
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-white"
+                          title={showPinInput ? "Sembunyikan PIN" : "Lihat PIN"}
+                        >
+                          {showPinInput ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
                       </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                      <p className="text-[11px] text-slate-400 text-center mt-1">
+                        Bawaan pabrik: <b className="text-slate-200 font-mono">1234</b> (diubah di Pengaturan)
+                      </p>
+                    </div>
 
-                <button 
-                  type="submit" 
-                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs py-2.5 rounded-lg transition-colors shadow-lg shadow-indigo-900/30 flex items-center justify-center gap-2 mt-4"
-                >
-                  <span>Masuk Akun Admin</span>
-                  <LogIn className="w-4 h-4" />
-                </button>
-              </motion.form>
+                    <AnimatePresence>
+                      {error && (
+                        <motion.div 
+                          initial={{ opacity: 0, height: 0 }} 
+                          animate={{ opacity: 1, height: 'auto' }} 
+                          exit={{ opacity: 0, height: 0 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 rounded-lg text-xs text-rose-400 text-center">
+                            {error}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    <button 
+                      type="submit" 
+                      className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs py-2.5 rounded-lg transition-colors shadow-lg shadow-indigo-900/30 flex items-center justify-center gap-2 mt-2"
+                    >
+                      <Lock className="w-4 h-4" />
+                      <span>Buka Dasbor dengan PIN</span>
+                    </button>
+                  </motion.form>
+                ) : (
+                  /* Sub-mode 2: Username & Password Login */
+                  <motion.form 
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    onSubmit={handleAdminLogin} 
+                    className="space-y-4"
+                  >
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-slate-300">Username Petugas TU</label>
+                      <div className="relative group/input">
+                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500 group-focus-within/input:text-indigo-400 transition-colors">
+                          <Mail className="h-4 w-4" />
+                        </div>
+                        <input 
+                          type="text" 
+                          value={username}
+                          onChange={(e) => setUsername(e.target.value)}
+                          className="w-full bg-[#0F172A] border border-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg pl-10 pr-3 py-2.5 text-xs text-slate-200 placeholder:text-slate-500 transition-all outline-none" 
+                          placeholder="Username admin (bawaan: admin)"
+                          required
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-slate-300">Kata Sandi</label>
+                      <div className="relative group/input">
+                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500 group-focus-within/input:text-indigo-400 transition-colors">
+                          <KeyRound className="h-4 w-4" />
+                        </div>
+                        <input 
+                          type="password" 
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          className="w-full bg-[#0F172A] border border-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg pl-10 pr-3 py-2.5 text-xs text-slate-200 placeholder:text-slate-500 transition-all outline-none" 
+                          placeholder="•••••••• (bawaan: 123456)"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <AnimatePresence>
+                      {error && (
+                        <motion.div 
+                          initial={{ opacity: 0, height: 0, y: -10 }} 
+                          animate={{ opacity: 1, height: 'auto', y: 0 }} 
+                          exit={{ opacity: 0, height: 0, y: -10 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 rounded-lg flex items-start gap-2 text-xs text-rose-400">
+                            <span>!</span>
+                            <p>{error}</p>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    <button 
+                      type="submit" 
+                      className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs py-2.5 rounded-lg transition-colors shadow-lg shadow-indigo-900/30 flex items-center justify-center gap-2 mt-2"
+                    >
+                      <span>Masuk Akun Admin</span>
+                      <LogIn className="w-4 h-4" />
+                    </button>
+                  </motion.form>
+                )}
+              </div>
             )}
+
+            {/* Quick Access to Dedicated Letter Submission Portal */}
+            <div className="mt-5 pt-4 border-t border-slate-700/80">
+              <Link 
+                to="/"
+                className="w-full p-2.5 rounded-xl bg-gradient-to-r from-emerald-950/40 via-slate-900 to-indigo-950/40 hover:from-emerald-950/60 hover:to-indigo-950/60 border border-emerald-500/30 hover:border-emerald-500/50 transition-all flex items-center justify-between text-xs text-slate-200 group"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30 shrink-0">
+                    <Sparkles className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="text-left">
+                    <div className="font-bold text-emerald-300 group-hover:text-emerald-200">Portal 1: Layanan Draf Surat Mandiri</div>
+                    <div className="text-[10px] text-slate-400">Halaman Utama Guru & Wali Murid SMPN 3 Kras</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 text-emerald-400 text-xs font-semibold">
+                  <span>Buka</span>
+                  <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                </div>
+              </Link>
+            </div>
           </div>
         </motion.div>
       </div>

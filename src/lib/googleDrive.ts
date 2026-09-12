@@ -654,3 +654,35 @@ export async function syncAllLettersToGoogleDrive(
 
   return { success, failed, errors };
 }
+
+/**
+ * Upload an Ijazah Scan/Photo file directly to Google Drive in the folder "📁 Berkas Ijazah & Legalisir"
+ */
+export async function uploadIjazahFileToGoogleDrive(
+  fileBlob: Blob,
+  fileName: string,
+  studentName: string,
+  ijazahNumber: string,
+  token: string,
+  parentFolderId?: string
+): Promise<DriveUploadResult> {
+  const rootId = parentFolderId || getRootFolderId();
+  const targetSubfolderName = '📁 Berkas Ijazah & Legalisir';
+  const subfolderId = await findOrCreateFolder(targetSubfolderName, rootId, token);
+  
+  const cleanStudent = sanitizeFileName(studentName || 'Siswa');
+  const cleanIjazah = sanitizeFileName(ijazahNumber || 'Ijazah');
+  const dateStr = format(new Date(), 'yyyy-MM-dd');
+  const ext = fileName.includes('.') ? fileName.split('.').pop() : 'jpg';
+  const uploadFileName = `${dateStr}_Ijazah_${cleanStudent}_${cleanIjazah}.${ext}`;
+
+  return await uploadFileToDrive(
+    fileBlob,
+    uploadFileName,
+    fileBlob.type || 'image/jpeg',
+    subfolderId,
+    token,
+    `Berkas Scan/Foto Ijazah untuk Permohonan Legalisir: ${studentName} (Nomor Seri: ${ijazahNumber})`
+  );
+}
+
