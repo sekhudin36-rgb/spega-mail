@@ -37,6 +37,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import ToastProvider from './ToastProvider';
 import CommandPalette from './CommandPalette';
 import CanvaPosterModal from './CanvaPosterModal';
+import GoogleDriveDatabaseModal from './GoogleDriveDatabaseModal';
+import { getGoogleAccessToken, getGoogleUser } from '../lib/googleDrive';
 import { generateFullUserManualPdf } from '../lib/pdfGuideHelper';
 import toast from 'react-hot-toast';
 
@@ -52,6 +54,8 @@ export default function Layout() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isCanvaModalOpen, setIsCanvaModalOpen] = useState(false);
+  const [isDriveDbModalOpen, setIsDriveDbModalOpen] = useState(false);
+  const [isDriveConnected, setIsDriveConnected] = useState(false);
 
   const toggleSidebarCollapse = () => {
     setIsSidebarCollapsed(prev => {
@@ -115,6 +119,25 @@ export default function Layout() {
   }, []);
 
   useEffect(() => {
+    const checkDriveStatus = async () => {
+      try {
+        const token = await getGoogleAccessToken();
+        const user = getGoogleUser();
+        setIsDriveConnected(Boolean(token || user));
+      } catch (e) {
+        setIsDriveConnected(false);
+      }
+    };
+    checkDriveStatus();
+    window.addEventListener('driveDatabaseSynced', checkDriveStatus);
+    window.addEventListener('googleDriveConfigChanged', checkDriveStatus);
+    return () => {
+      window.removeEventListener('driveDatabaseSynced', checkDriveStatus);
+      window.removeEventListener('googleDriveConfigChanged', checkDriveStatus);
+    };
+  }, []);
+
+  useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
       toast.success('Koneksi internet terhubung kembali');
@@ -173,103 +196,129 @@ export default function Layout() {
       {/* Sidebar */}
       <AnimatePresence mode="wait">
         {isSidebarOpen && (
-          <motion.aside
-            initial={{ width: 0, opacity: 0 }}
-            animate={{ width: isSidebarCollapsed ? 72 : 260, opacity: 1 }}
-            exit={{ width: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: 'easeInOut' }}
-            className={cn(
-              "border-r border-[#1E293B] bg-[#0B0E14]/95 backdrop-blur-md flex flex-col p-3 gap-3 shrink-0 z-20 print:hidden overflow-hidden transition-all duration-200",
-              isSidebarCollapsed ? "w-[72px] items-center" : "w-[260px]"
-            )}
-          >
-            {/* Brand Header & Minimize Toggle */}
-            <div className={cn(
-              "flex items-center pb-3 border-b border-[#1E293B] w-full",
-              isSidebarCollapsed ? "justify-center" : "justify-between gap-2"
-            )}>
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="relative shrink-0">
-                  <div className="w-9 h-9 bg-gradient-to-tr from-indigo-700 to-indigo-500 rounded-xl flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-900/50 border border-indigo-400/30">
-                    <Mail className="w-4 h-4 text-white" />
-                  </div>
-                  <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-[#0B0E14]"></span>
-                </div>
-                {!isSidebarCollapsed && (
-                  <div className="min-w-0">
-                    <h1 className="font-bold text-sm tracking-tight text-white truncate flex items-center gap-1.5">
-                      {appName}
-                      <span className="text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded border border-amber-500/30">PORTAL 2</span>
-                    </h1>
-                    <p className="text-[11px] text-slate-400 truncate">Dasbor Admin TU • SMPN 3 Kras</p>
-                  </div>
-                )}
-              </div>
+          <>
+            {/* Mobile Backdrop Overlay for Sidebar */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-slate-950/75 backdrop-blur-sm z-30 md:hidden"
+              onClick={() => setIsSidebarOpen(false)}
+            />
 
-              {/* Minimize / Expand Toggle Button in Sidebar Header */}
-              {!isSidebarCollapsed && (
-                <button
-                  onClick={toggleSidebarCollapse}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 border border-transparent hover:border-slate-700 transition-colors"
-                  title="Perkecil / Minimize Menu Sidebar"
-                >
-                  <PanelLeftClose className="w-4 h-4" />
-                </button>
+            <motion.aside
+              initial={{ x: -280, opacity: 0 }}
+              animate={{ x: 0, width: isSidebarCollapsed ? 72 : 260, opacity: 1 }}
+              exit={{ x: -280, opacity: 0 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className={cn(
+                "border-r border-[#1E293B] bg-[#0B0E14]/98 md:bg-[#0B0E14]/95 backdrop-blur-md flex flex-col p-3 gap-3 shrink-0 z-40 md:z-20 print:hidden overflow-hidden transition-all duration-200",
+                "fixed inset-y-0 left-0 md:static shadow-2xl md:shadow-none",
+                isSidebarCollapsed ? "w-[72px] items-center" : "w-[260px]"
               )}
-            </div>
+            >
+              {/* Brand Header & Minimize Toggle */}
+              <div className={cn(
+                "flex items-center pb-3 border-b border-[#1E293B] w-full",
+                isSidebarCollapsed ? "justify-center" : "justify-between gap-2"
+              )}>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="relative shrink-0">
+                    <div className="w-9 h-9 bg-gradient-to-tr from-indigo-700 to-indigo-500 rounded-xl flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-900/50 border border-indigo-400/30">
+                      <Mail className="w-4 h-4 text-white" />
+                    </div>
+                    <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-[#0B0E14]"></span>
+                  </div>
+                  {!isSidebarCollapsed && (
+                    <div className="min-w-0">
+                      <h1 className="font-bold text-sm tracking-tight text-white truncate flex items-center gap-1.5">
+                        {appName}
+                        <span className="text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded border border-amber-500/30">PORTAL 2</span>
+                      </h1>
+                      <p className="text-[11px] text-slate-400 truncate">Dasbor Admin TU • SMPN 3 Kras</p>
+                    </div>
+                  )}
+                </div>
 
-            {/* Navigation Menu */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 w-full">
-              <div>
-                {!isSidebarCollapsed && (
-                  <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2 px-2">Modul Persuratan</p>
-                )}
-                <nav className="flex flex-col gap-1 w-full">
-                  {navItems.map((item) => (
-                    <NavLink
-                      key={item.to}
-                      to={item.to}
-                      title={isSidebarCollapsed ? `${item.label} ${item.badge ? `(${item.badge})` : ''}` : undefined}
-                      className={({ isActive }) =>
-                        cn(
-                          'flex items-center rounded-lg text-xs transition-all duration-150 border group relative',
-                          isSidebarCollapsed 
-                            ? 'justify-center p-2.5' 
-                            : 'justify-between px-3 py-2',
-                          isActive
-                            ? 'bg-gradient-to-r from-indigo-950/60 to-slate-800 text-white font-semibold border-indigo-500/40 shadow-sm'
-                            : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border-transparent'
-                        )
-                      }
+                {/* Close button on mobile / Minimize on desktop */}
+                <div className="flex items-center">
+                  <button
+                    onClick={() => setIsSidebarOpen(false)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 md:hidden"
+                    title="Tutup Menu"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+
+                  {!isSidebarCollapsed && (
+                    <button
+                      onClick={toggleSidebarCollapse}
+                      className="hidden md:block p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 border border-transparent hover:border-slate-700 transition-colors"
+                      title="Perkecil / Minimize Menu Sidebar"
                     >
-                      {({ isActive }) => (
-                        <>
-                          <div className={cn("flex items-center gap-2.5 truncate", isSidebarCollapsed && "justify-center")}>
-                            <item.icon className={cn(
-                              "w-4 h-4 shrink-0 transition-transform group-hover:scale-110",
-                              isActive ? "text-indigo-400" : "text-slate-400"
-                            )} />
-                            {!isSidebarCollapsed && (
-                              <span className="truncate">{item.label}</span>
-                            )}
-                          </div>
-
-                          {!isSidebarCollapsed && item.badge && (
-                            <span className="text-[9px] font-mono font-bold bg-indigo-500/20 text-indigo-300 px-1.5 py-0.2 rounded border border-indigo-500/30">
-                              {item.badge}
-                            </span>
-                          )}
-
-                          {/* Mini Indicator dot for collapsed state */}
-                          {isSidebarCollapsed && item.badge && (
-                            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
-                          )}
-                        </>
-                      )}
-                    </NavLink>
-                  ))}
-                </nav>
+                      <PanelLeftClose className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
               </div>
+
+              {/* Navigation Menu */}
+              <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 w-full">
+                <div>
+                  {!isSidebarCollapsed && (
+                    <p className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mb-2 px-2">Modul Persuratan</p>
+                  )}
+                  <nav className="flex flex-col gap-1 w-full">
+                    {navItems.map((item) => (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        onClick={() => {
+                          if (window.innerWidth < 768) {
+                            setIsSidebarOpen(false);
+                          }
+                        }}
+                        title={isSidebarCollapsed ? `${item.label} ${item.badge ? `(${item.badge})` : ''}` : undefined}
+                        className={({ isActive }) =>
+                          cn(
+                            'flex items-center rounded-lg text-xs transition-all duration-150 border group relative',
+                            isSidebarCollapsed 
+                              ? 'justify-center p-2.5' 
+                              : 'justify-between px-3 py-2',
+                            isActive
+                              ? 'bg-gradient-to-r from-indigo-950/60 to-slate-800 text-white font-semibold border-indigo-500/40 shadow-sm'
+                              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border-transparent'
+                          )
+                        }
+                      >
+                        {({ isActive }) => (
+                          <>
+                            <div className={cn("flex items-center gap-2.5 truncate", isSidebarCollapsed && "justify-center")}>
+                              <item.icon className={cn(
+                                "w-4 h-4 shrink-0 transition-transform group-hover:scale-110",
+                                isActive ? "text-indigo-400" : "text-slate-400"
+                              )} />
+                              {!isSidebarCollapsed && (
+                                <span className="truncate">{item.label}</span>
+                              )}
+                            </div>
+
+                            {!isSidebarCollapsed && item.badge && (
+                              <span className="text-[9px] font-mono font-bold bg-indigo-500/20 text-indigo-300 px-1.5 py-0.2 rounded border border-indigo-500/30">
+                                {item.badge}
+                              </span>
+                            )}
+
+                            {/* Mini Indicator dot for collapsed state */}
+                            {isSidebarCollapsed && item.badge && (
+                              <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+                            )}
+                          </>
+                        )}
+                      </NavLink>
+                    ))}
+                  </nav>
+                </div>
 
               {/* System / Storage Monitor */}
               {isSidebarCollapsed ? (
@@ -346,8 +395,9 @@ export default function Layout() {
               </button>
             </div>
           </motion.aside>
-        )}
-      </AnimatePresence>
+        </>
+      )}
+    </AnimatePresence>
 
       {/* Main Container */}
       <main className="flex-1 flex flex-col min-w-0 bg-[#0F172A] overflow-hidden print:overflow-visible relative z-10">
@@ -483,6 +533,24 @@ export default function Layout() {
               </AnimatePresence>
             </div>
 
+            {/* Google Drive Database Cloud Pill / Button */}
+            <button
+              onClick={() => setIsDriveDbModalOpen(true)}
+              className={cn(
+                "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold shadow-sm transition-all",
+                isDriveConnected
+                  ? "bg-sky-950/60 hover:bg-sky-900/70 border-sky-500/40 text-sky-300"
+                  : "bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300 hover:text-white"
+              )}
+              title="Database Google Drive (Pusat Sinkronisasi & Cadangan Cloud)"
+            >
+              <Database className="w-3.5 h-3.5 text-sky-400" />
+              <span className="hidden sm:inline">Database Drive</span>
+              {isDriveConnected && (
+                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)] animate-pulse" title="Google Drive Terhubung"></span>
+              )}
+            </button>
+
             {/* System Status Pill */}
             <div className="flex items-center gap-2 text-xs bg-slate-800/80 px-2.5 py-1.5 rounded-lg border border-slate-700/80 shadow-sm">
               <span className={cn("w-2 h-2 rounded-full", isOnline ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.7)]" : "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.7)]")}></span>
@@ -517,9 +585,73 @@ export default function Layout() {
         </header>
 
         {/* Dynamic Page Content View */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 print:overflow-visible print:p-0 relative custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 pb-20 md:pb-6 print:overflow-visible print:p-0 relative custom-scrollbar">
           <Outlet />
         </div>
+
+        {/* Mobile Bottom Navigation Dock */}
+        <nav className="fixed bottom-0 left-0 right-0 z-30 bg-[#0B0E14]/95 backdrop-blur-xl border-t border-slate-800/90 px-3 py-1.5 flex items-center justify-around md:hidden shadow-[0_-4px_25px_rgba(0,0,0,0.6)] print:hidden">
+          <NavLink
+            to="/admin"
+            className={({ isActive }) =>
+              cn(
+                "flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all text-[10px] font-medium min-w-[54px]",
+                isActive ? "text-indigo-400 font-bold bg-indigo-500/10" : "text-slate-400 hover:text-slate-200"
+              )
+            }
+          >
+            <LayoutDashboard className="w-4 h-4 mb-0.5" />
+            <span>Dasbor</span>
+          </NavLink>
+
+          <NavLink
+            to="/letters"
+            className={({ isActive }) =>
+              cn(
+                "flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all text-[10px] font-medium min-w-[54px]",
+                isActive ? "text-indigo-400 font-bold bg-indigo-500/10" : "text-slate-400 hover:text-slate-200"
+              )
+            }
+          >
+            <Mail className="w-4 h-4 mb-0.5" />
+            <span>Surat</span>
+          </NavLink>
+
+          {/* Highlighted Portal 1 Quick Switch */}
+          <Link
+            to="/"
+            className="flex flex-col items-center justify-center -mt-4 py-1.5 px-3 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white shadow-lg shadow-emerald-950/70 border border-emerald-400/40 min-w-[62px] active:scale-95 transition-transform"
+            title="Buka Portal 1: Layanan Guru & Wali Murid"
+          >
+            <Sparkles className="w-4 h-4 mb-0.5 text-amber-200" />
+            <span className="text-[10px] font-bold">Portal 1</span>
+          </Link>
+
+          <NavLink
+            to="/archives"
+            className={({ isActive }) =>
+              cn(
+                "flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all text-[10px] font-medium min-w-[54px]",
+                isActive ? "text-indigo-400 font-bold bg-indigo-500/10" : "text-slate-400 hover:text-slate-200"
+              )
+            }
+          >
+            <Archive className="w-4 h-4 mb-0.5" />
+            <span>Arsip</span>
+          </NavLink>
+
+          <button
+            type="button"
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            className={cn(
+              "flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all text-[10px] font-medium min-w-[54px]",
+              isSidebarOpen ? "text-indigo-400 font-bold bg-indigo-500/10" : "text-slate-400 hover:text-slate-200"
+            )}
+          >
+            <Menu className="w-4 h-4 mb-0.5" />
+            <span>Menu</span>
+          </button>
+        </nav>
 
         {/* High Density Footer */}
         <footer className="h-9 bg-[#0B0E14] border-t border-slate-800/80 px-6 flex items-center justify-between shrink-0 text-[10px] text-slate-400 font-mono print:hidden">
@@ -551,6 +683,12 @@ export default function Layout() {
       <CanvaPosterModal
         isOpen={isCanvaModalOpen}
         onClose={() => setIsCanvaModalOpen(false)}
+      />
+
+      {/* Google Drive Cloud Database Modal */}
+      <GoogleDriveDatabaseModal
+        isOpen={isDriveDbModalOpen}
+        onClose={() => setIsDriveDbModalOpen(false)}
       />
     </div>
   );

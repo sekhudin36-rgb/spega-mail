@@ -51,6 +51,7 @@ import { jsPDF } from 'jspdf';
 import QuickAgendaModal from '../components/QuickAgendaModal';
 import CanvaPosterModal from '../components/CanvaPosterModal';
 import AdminPinModal from '../components/AdminPinModal';
+import { triggerBackgroundDriveDatabaseSync } from '../lib/googleDriveDatabase';
 import { generateFullUserManualPdf } from '../lib/pdfGuideHelper';
 import { 
   getSchoolConfig, 
@@ -557,6 +558,9 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
         details: `Permohonan surat '${letterTitle}' didaftarkan dengan Nomor Agenda #${effectiveSeq} (${refNumber}), meneruskan agenda nomor sebelumnya (#${outboxAgenda.formattedLast}).`
       });
 
+      // Sinkronisasi otomatis ke Database Google Drive
+      triggerBackgroundDriveDatabaseSync();
+
       // Generate ONLY Surat Permohonan as submission proof for Applicant (Official letter requires admin approval)
       generateSuratPermohonanPDF(newLetter, config);
 
@@ -743,61 +747,61 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
         </div>
 
         {/* Top Quick Navigation Bar */}
-        <div className="relative z-10 w-full max-w-4xl mb-4 flex items-center justify-between px-2">
+        <div className="relative z-10 w-full max-w-4xl mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-2">
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
             <span className="text-xs font-bold text-emerald-400 font-mono">PORTAL 1</span>
             <span className="text-slate-500 text-xs">•</span>
-            <span className="text-xs font-medium text-slate-300 font-mono">LAYANAN DRAF GURU & WALI</span>
+            <span className="text-[11px] sm:text-xs font-medium text-slate-300 font-mono truncate">LAYANAN DRAF GURU & WALI</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 self-stretch sm:self-auto">
             <button
               type="button"
               onClick={generateFullUserManualPdf}
-              className="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+              className="flex-1 sm:flex-initial px-3 py-2 sm:py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-sm"
               title="Unduh Buku Panduan Lengkap PDF"
             >
-              <FileDown className="w-3.5 h-3.5 text-indigo-400" />
+              <FileDown className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
               <span>Panduan PDF</span>
             </button>
             <button
               type="button"
               onClick={() => setIsAdminPinModalOpen(true)}
-              className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-indigo-500/20 hover:from-amber-500/30 hover:to-indigo-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
+              className="flex-1 sm:flex-initial px-3 py-2 sm:py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-indigo-500/20 hover:from-amber-500/30 hover:to-indigo-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm"
               title="Masuk ke Portal 2: Dasbor Admin TU menggunakan PIN"
             >
-              <Lock className="w-3.5 h-3.5 text-amber-400" />
-              <span>Portal 2: Admin TU (PIN)</span>
+              <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span>Admin TU (PIN)</span>
             </button>
           </div>
         </div>
 
-        <div className="relative z-10 w-full max-w-4xl flex flex-col lg:flex-row items-stretch gap-8">
+        <div className="relative z-10 w-full max-w-4xl flex flex-col lg:flex-row items-stretch gap-5 sm:gap-8">
           {/* Left panel: Info & Explanation */}
-          <div className="lg:w-1/2 bg-gradient-to-br from-slate-900/90 to-slate-800/80 border border-slate-700/70 rounded-2xl p-8 flex flex-col justify-between shadow-2xl backdrop-blur-xl">
+          <div className="lg:w-1/2 bg-gradient-to-br from-slate-900/90 to-slate-800/80 border border-slate-700/70 rounded-2xl p-5 sm:p-7 lg:p-8 flex flex-col justify-between shadow-2xl backdrop-blur-xl">
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs font-semibold mb-6">
-                <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                <span className="font-bold">PORTAL 1: LAYANAN PERSURATAN MANDIRI</span>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs font-semibold mb-4 sm:mb-6">
+                <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                <span className="font-bold text-[11px] sm:text-xs">PORTAL 1: PERSURATAN MANDIRI</span>
               </div>
 
-              <h1 className="text-3xl font-bold text-white tracking-tight leading-tight mb-3">
+              <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight leading-tight mb-2 sm:mb-3">
                 Layanan Draf Surat <br/>
                 <span className="text-indigo-400">Guru & Wali Murid</span>
               </h1>
 
-              <p className="text-sm text-slate-300 mb-6 leading-relaxed">
+              <p className="text-xs sm:text-sm text-slate-300 mb-5 sm:mb-6 leading-relaxed">
                 Akses mandiri pembuatan permohonan surat tugas, perizinan, keterangan siswa aktif, mutasi, dan rekomendasi sekolah tanpa perlu menunggu antrean manual.
               </p>
 
-              <div className="space-y-3.5">
+              <div className="space-y-3 sm:space-y-3.5">
                 <div className="flex items-start gap-3 text-slate-300">
                   <div className="w-8 h-8 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center shrink-0 text-indigo-400 mt-0.5">
                     <Briefcase className="w-4 h-4" />
                   </div>
                   <div>
                     <h4 className="text-xs font-bold text-white uppercase tracking-wider">Khusus Guru & Tendik</h4>
-                    <p className="text-xs text-slate-400">Pengajuan surat tugas MGMP/dinas, surat izin mengajar, cuti, dan pengantar kegiatan kelas.</p>
+                    <p className="text-[11px] sm:text-xs text-slate-400">Pengajuan surat tugas MGMP/dinas, surat izin mengajar, cuti, dan pengantar kegiatan kelas.</p>
                   </div>
                 </div>
 
@@ -807,7 +811,7 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
                   </div>
                   <div>
                     <h4 className="text-xs font-bold text-white uppercase tracking-wider">Khusus Orang Tua / Wali</h4>
-                    <p className="text-xs text-slate-400">Permohonan surat keterangan aktif (BPJS/tunjangan), surat izin siswa, mutasi sekolah, & dispensasi.</p>
+                    <p className="text-[11px] sm:text-xs text-slate-400">Permohonan surat keterangan aktif (BPJS/tunjangan), surat izin siswa, mutasi sekolah, & dispensasi.</p>
                   </div>
                 </div>
 
@@ -817,13 +821,13 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
                   </div>
                   <div>
                     <h4 className="text-xs font-bold text-white uppercase tracking-wider">Terhubung Langsung ke Admin TU</h4>
-                    <p className="text-xs text-slate-400">Draf yang Anda buat otomatis masuk ke akun Tata Usaha untuk diterbitkan nomor surat resmi.</p>
+                    <p className="text-[11px] sm:text-xs text-slate-400">Draf yang Anda buat otomatis masuk ke akun Tata Usaha untuk diterbitkan nomor surat resmi.</p>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="pt-8 border-t border-slate-700/50 mt-6 flex items-center justify-between text-xs text-slate-400">
+            <div className="pt-5 sm:pt-8 border-t border-slate-700/50 mt-5 sm:mt-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs text-slate-400">
               <span>SMP Negeri 3 Kras, Kediri</span>
               <button 
                 type="button"
@@ -831,13 +835,13 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
                 className="text-amber-400 hover:text-amber-300 font-semibold flex items-center gap-1.5 transition-colors"
               >
                 <KeyRound className="w-3.5 h-3.5" />
-                <span>Masuk ke Portal 2 (Admin TU via PIN)</span>
+                <span>Masuk ke Portal 2 (Admin TU)</span>
               </button>
             </div>
           </div>
 
           {/* Right panel: Login form */}
-          <div className="lg:w-1/2 bg-[#1E293B] border border-slate-700/80 rounded-2xl p-8 shadow-2xl flex flex-col justify-center relative">
+          <div className="lg:w-1/2 bg-[#1E293B] border border-slate-700/80 rounded-2xl p-5 sm:p-7 lg:p-8 shadow-2xl flex flex-col justify-center relative">
             <div className="mb-6">
               <h2 className="text-xl font-bold text-white tracking-tight mb-1">Masuk Portal Pemohon</h2>
               <p className="text-xs text-slate-400">Masukkan Nama Lengkap dan Nomor HP/WhatsApp aktif Anda</p>
@@ -998,34 +1002,31 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
   return (
     <div className="min-h-screen bg-[#090D16] text-slate-100 flex flex-col font-sans">
       {/* Header bar */}
-      <header className="sticky top-0 z-30 bg-[#0F172A]/90 backdrop-blur-md border-b border-slate-800 px-4 lg:px-8 py-3.5">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
+      <header className="sticky top-0 z-30 bg-[#0F172A]/95 backdrop-blur-md border-b border-slate-800 px-3 sm:px-4 lg:px-8 py-2.5 sm:py-3.5">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <div className={cn(
-              "w-9 h-9 rounded-xl flex items-center justify-center font-bold text-white shadow-md",
+              "w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center font-bold text-white shadow-md shrink-0",
               session.role === 'guru' ? "bg-indigo-600 shadow-indigo-600/30" : "bg-emerald-600 shadow-emerald-600/30"
             )}>
-              {session.role === 'guru' ? <Briefcase className="w-5 h-5" /> : <GraduationCap className="w-5 h-5" />}
+              {session.role === 'guru' ? <Briefcase className="w-4 h-4 sm:w-5 sm:h-5" /> : <GraduationCap className="w-4 h-4 sm:w-5 sm:h-5" />}
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <span className="text-[10px] font-bold px-1.5 sm:px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0">
                   PORTAL 1
                 </span>
-                <h1 className="text-base font-bold text-white tracking-tight">Layanan Draf Surat Guru & Wali Murid</h1>
-                <span className={cn(
-                  "text-[10px] uppercase font-bold px-2 py-0.5 rounded-full border",
-                  session.role === 'guru' ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/30" : "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
-                )}>
-                  {session.role === 'guru' ? 'Guru / Tendik' : 'Wali Murid'}
-                </span>
+                <h1 className="text-xs sm:text-base font-bold text-white tracking-tight truncate">
+                  <span className="hidden sm:inline">Layanan Draf Surat </span>
+                  <span>{session.role === 'guru' ? 'Guru & Tendik' : 'Wali Murid'}</span>
+                </h1>
               </div>
-              <p className="text-xs text-slate-400">SMP Negeri 3 Kras • Draf diverifikasi & diregister oleh Petugas Admin TU</p>
+              <p className="text-[11px] text-slate-400 hidden sm:block truncate">SMP Negeri 3 Kras • Draf diverifikasi & diregister oleh Petugas Admin TU</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="hidden sm:block text-right">
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+            <div className="hidden md:block text-right">
               <div className="text-xs font-bold text-slate-200">{session.name}</div>
               <div className="text-[11px] font-mono text-slate-400 flex items-center gap-1 justify-end">
                 <Phone className="w-2.5 h-2.5 text-emerald-400" />
@@ -1036,7 +1037,7 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
             <button
               type="button"
               onClick={generateFullUserManualPdf}
-              className="p-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all flex items-center gap-1.5 text-xs font-semibold shadow-sm"
+              className="p-2 sm:px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all flex items-center gap-1.5 text-xs font-semibold shadow-sm"
               title="Unduh Buku Panduan Lengkap PDF"
             >
               <FileDown className="w-3.5 h-3.5 text-indigo-400" />
@@ -1046,21 +1047,21 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
             <button
               type="button"
               onClick={() => setIsCanvaModalOpen(true)}
-              className="p-2 px-3 rounded-xl bg-gradient-to-r from-sky-600/90 to-indigo-600/90 hover:from-sky-500 hover:to-indigo-500 text-white border border-sky-400/40 transition-all flex items-center gap-1.5 text-xs font-bold shadow-md shadow-sky-900/30"
-              title="Buka Desain Poster & Panduan Canva (Langkah Akses & Nomor Agenda)"
+              className="p-2 sm:px-3 rounded-xl bg-gradient-to-r from-sky-600/90 to-indigo-600/90 hover:from-sky-500 hover:to-indigo-500 text-white border border-sky-400/40 transition-all flex items-center gap-1.5 text-xs font-bold shadow-md shadow-sky-900/30"
+              title="Buka Desain Poster & Panduan Canva"
             >
-              <Palette className="w-4 h-4 text-amber-300" />
-              <span className="hidden sm:inline">Desain Poster & Canva</span>
+              <Palette className="w-3.5 h-3.5 text-amber-300" />
+              <span className="hidden sm:inline">Poster & Canva</span>
             </button>
 
             <button
               type="button"
               onClick={() => setIsAdminPinModalOpen(true)}
-              className="p-2 px-3 rounded-xl bg-gradient-to-r from-amber-500/20 to-indigo-500/20 hover:from-amber-500/30 hover:to-indigo-500/30 text-amber-300 border border-amber-500/40 transition-all flex items-center gap-1.5 text-xs font-bold shadow-sm"
+              className="p-2 sm:px-3 rounded-xl bg-gradient-to-r from-amber-500/20 to-indigo-500/20 hover:from-amber-500/30 hover:to-indigo-500/30 text-amber-300 border border-amber-500/40 transition-all flex items-center gap-1.5 text-xs font-bold shadow-sm"
               title="Beralih ke Portal 2: Dasbor Admin TU menggunakan PIN"
             >
               <Lock className="w-3.5 h-3.5 text-amber-400" />
-              <span className="hidden sm:inline">Portal 2: Admin TU (PIN)</span>
+              <span className="hidden sm:inline">Portal 2 (PIN)</span>
             </button>
 
             <button
@@ -1068,7 +1069,7 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
               className="p-2 rounded-xl bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-300 border border-slate-700 transition-colors flex items-center gap-1.5 text-xs font-medium"
               title="Keluar dari Portal"
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className="w-3.5 h-3.5" />
               <span className="hidden md:inline">Keluar</span>
             </button>
           </div>
@@ -1076,39 +1077,39 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-8 space-y-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-3.5 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
         {/* Banner with Navigation Tabs */}
-        <div className="bg-gradient-to-r from-slate-900 via-[#131C31] to-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0">
-              <Sparkles className="w-6 h-6" />
+        <div className="bg-gradient-to-r from-slate-900 via-[#131C31] to-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 sm:gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0">
+              <Sparkles className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-white">Selamat Datang, {session.name}</h2>
-              <p className="text-xs text-slate-400">
-                Pilih jenis surat yang dibutuhkan di bawah, lengkapi data permohonan, dan unduh naskah resmi draf PDF seketika.
+              <h2 className="text-base sm:text-lg font-bold text-white">Selamat Datang, {session.name}</h2>
+              <p className="text-[11px] sm:text-xs text-slate-400">
+                Pilih jenis surat yang dibutuhkan, lengkapi data permohonan, dan unduh naskah resmi draf PDF seketika.
               </p>
             </div>
           </div>
 
-          {/* Navigation Pill Tabs */}
-          <div className="flex flex-wrap items-center gap-2 bg-slate-950/80 p-1.5 rounded-xl border border-slate-800 shrink-0">
+          {/* Navigation Pill Tabs - Swipeable on mobile */}
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar w-full md:w-auto p-1.5 bg-slate-950/80 rounded-xl border border-slate-800 shrink-0">
             <button
               onClick={() => setActiveTab('buat_draf')}
               className={cn(
-                "px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2",
+                "px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap",
                 activeTab === 'buat_draf'
                   ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
                   : "text-slate-400 hover:text-slate-200"
               )}
             >
               <FilePlus className="w-3.5 h-3.5" />
-              <span>Buat Draf Surat</span>
+              <span>Buat Draf</span>
             </button>
             <button
               onClick={() => setActiveTab('riwayat')}
               className={cn(
-                "px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 relative",
+                "px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap relative",
                 activeTab === 'riwayat'
                   ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
                   : "text-slate-400 hover:text-slate-200"
@@ -1125,14 +1126,14 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
             <button
               onClick={() => setActiveTab('registrasi_agenda')}
               className={cn(
-                "px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 relative",
+                "px-3.5 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap relative",
                 activeTab === 'registrasi_agenda'
                   ? "bg-sky-600 text-white shadow-md shadow-sky-600/30"
                   : "text-slate-400 hover:text-slate-200"
               )}
             >
               <Hash className="w-3.5 h-3.5 text-sky-400" />
-              <span>Registrasi Nomor Agenda</span>
+              <span>Buku Agenda</span>
               <span className="px-1.5 py-0.5 rounded-full bg-sky-400/20 text-[10px] font-mono font-bold text-sky-300 border border-sky-400/30">
                 #{outboxAgenda.formattedNext}
               </span>
@@ -1141,17 +1142,17 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
             <button
               type="button"
               onClick={() => setIsQuickAgendaModalOpen(true)}
-              className="px-3.5 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+              className="px-3 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm shrink-0 whitespace-nowrap"
               title="Untuk guru yang hanya meminta nomor agenda saja tanpa membuat draf di sistem"
             >
               <Tag className="w-3.5 h-3.5 text-amber-400" />
-              <span>Minta Nomor Agenda Saja</span>
+              <span>Minta No. Saja</span>
             </button>
 
             <button
               type="button"
               onClick={() => setIsCanvaModalOpen(true)}
-              className="px-3.5 py-2 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/40 text-sky-300 hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+              className="px-3 py-2 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/40 text-sky-300 hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm shrink-0 whitespace-nowrap"
               title="Lihat desain poster panduan infografis siap cetak dan template Canva"
             >
               <Palette className="w-3.5 h-3.5 text-sky-400" />
@@ -2178,7 +2179,108 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
 
             {/* Interactive Data Table of Registered Outbox Agenda */}
             <div className="bg-slate-900/90 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-              <div className="overflow-x-auto">
+              {/* Mobile Card List View (Visible on small screens) */}
+              <div className="block md:hidden divide-y divide-slate-800/80">
+                {filteredAgendaList.length === 0 ? (
+                  <div className="py-10 px-4 text-center text-slate-500">
+                    <FileText className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                    <p className="font-semibold text-slate-400">Tidak ada nomor agenda keluar yang cocok</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Coba ubah kata kunci pencarian atau filter status dokumen.</p>
+                  </div>
+                ) : (
+                  filteredAgendaList.map((item) => {
+                    const isApproved = item.submissionStatus === 'approved';
+                    const isLatest = item.formattedSeq === outboxAgenda.formattedLast;
+                    return (
+                      <div key={item.id} className="p-4 space-y-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className={cn(
+                              "font-mono font-bold px-2 py-0.5 rounded-md text-xs border",
+                              isLatest
+                                ? "bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm"
+                                : "bg-slate-800/80 text-slate-200 border-slate-700"
+                            )}>
+                              #{item.formattedSeq}
+                            </span>
+                            {isLatest && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                Terakhir
+                              </span>
+                            )}
+                          </div>
+
+                          <span className="text-[11px] text-slate-400 font-mono">
+                            {item.date ? format(new Date(item.date), 'dd MMM yyyy', { locale: id }) : '-'}
+                          </span>
+                        </div>
+
+                        <div>
+                          <h4 className="text-xs font-bold text-white leading-snug line-clamp-2">
+                            {item.title}
+                          </h4>
+                          <div className="text-[11px] font-mono text-sky-400 font-semibold mt-1">
+                            {item.referenceNumber}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-800/50">
+                          <span className="truncate max-w-[180px]">
+                            Kepada: <strong className="text-slate-300">{item.senderOrRecipient || '-'}</strong>
+                          </span>
+                          <span className="text-slate-400 truncate">
+                            {item.applicantName || 'Tata Usaha'}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-1">
+                          {isApproved ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                              <span>Resmi / Disetujui</span>
+                            </span>
+                          ) : item.isDraft ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                              <Clock className="w-3 h-3 text-amber-400" />
+                              <span>Draf Menunggu ACC</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                              <span>Aktif</span>
+                            </span>
+                          )}
+
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handlePreviewCurrentLetter(item.letter, 'permohonan')}
+                              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center gap-1"
+                              title="Lihat Permohonan"
+                            >
+                              <Eye className="w-3 h-3 text-sky-400" />
+                              <span>Bukti</span>
+                            </button>
+                            {isApproved && (
+                              <button
+                                type="button"
+                                onClick={() => handlePreviewCurrentLetter(item.letter, 'resmi')}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/40 text-xs font-bold flex items-center gap-1"
+                                title="Lihat Surat Resmi"
+                              >
+                                <Sparkles className="w-3 h-3 text-emerald-400" />
+                                <span>Resmi</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Desktop Table View (Hidden on small screens) */}
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-slate-800 bg-slate-950/90 text-slate-400 font-semibold uppercase text-[10px] tracking-wider">

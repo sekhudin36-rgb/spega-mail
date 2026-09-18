@@ -14,9 +14,11 @@ import QRCode from 'qrcode';
 import { useConfirm } from '../components/ConfirmProvider';
 import LetterTemplateWizard from '../components/LetterTemplateWizard';
 import GoogleDriveModal from '../components/GoogleDriveModal';
+import GoogleDriveDatabaseModal from '../components/GoogleDriveDatabaseModal';
 import PrintPreviewModal from '../components/PrintPreviewModal';
 import QuickAgendaModal from '../components/QuickAgendaModal';
 import CanvaPosterModal from '../components/CanvaPosterModal';
+import { triggerBackgroundDriveDatabaseSync } from '../lib/googleDriveDatabase';
 import { 
   getSchoolConfig, 
   generateDisposisiHTML, 
@@ -62,6 +64,7 @@ export default function Letters() {
   const [formLetterType, setFormLetterType] = useState<'inbox' | 'outbox'>('inbox');
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [isDriveModalOpen, setIsDriveModalOpen] = useState(false);
+  const [isDriveDbModalOpen, setIsDriveDbModalOpen] = useState(false);
   const [driveModalLetter, setDriveModalLetter] = useState<Letter | null>(null);
   const [driveModalMode, setDriveModalMode] = useState<'single' | 'batch' | 'syncAll'>('single');
   const [printModalState, setPrintModalState] = useState<{
@@ -436,6 +439,7 @@ export default function Letters() {
     if (editingLetter && editingLetter.id) {
       await db.letters.update(editingLetter.id, data as Letter);
       toast.success('Berhasil memperbarui data surat');
+      triggerBackgroundDriveDatabaseSync();
     } else {
       await db.letters.add(data as Letter);
       
@@ -457,6 +461,9 @@ export default function Letters() {
       await db.archives.add(archiveData);
       confetti({ particleCount: 60, spread: 70, origin: { y: 0.7 } });
       toast.success('Surat baru berhasil diregistrasi & diarsipkan');
+
+      // Sinkronisasi database ke Google Drive
+      triggerBackgroundDriveDatabaseSync();
 
       // Auto-sync ke Google Drive jika diaktifkan di Pengaturan
       if (isAutoSyncEnabled()) {
@@ -494,6 +501,7 @@ export default function Letters() {
       await db.letters.delete(id);
       setSelectedIds(prev => prev.filter(selectedId => selectedId !== id));
       toast.success('Dokumen surat berhasil dihapus');
+      triggerBackgroundDriveDatabaseSync();
     }
   };
 
@@ -509,6 +517,7 @@ export default function Letters() {
       await db.letters.bulkDelete(selectedIds);
       setSelectedIds([]);
       toast.success(`${selectedIds.length} dokumen surat berhasil dihapus`);
+      triggerBackgroundDriveDatabaseSync();
     }
   };
 
@@ -1387,31 +1396,41 @@ export default function Letters() {
           <p className="text-sm text-gray-600">Dicetak pada: {new Date().toLocaleDateString('id-ID')}</p>
         </div>
 
-        <div className="flex flex-wrap gap-2 w-full xl:w-auto print:hidden">
+        <div className="flex items-center gap-2 w-full xl:w-auto print:hidden overflow-x-auto no-scrollbar pb-1 sm:pb-0 flex-nowrap sm:flex-wrap">
           {selectedIds.length > 0 && (
             <>
               <button 
                 onClick={handleOpenDriveModalBatch} 
-                className="glass-button flex items-center justify-center gap-2 flex-1 sm:flex-none !bg-sky-600 hover:!bg-sky-500 text-white font-medium shadow" 
+                className="glass-button flex items-center justify-center gap-2 shrink-0 !bg-sky-600 hover:!bg-sky-500 text-white font-medium shadow" 
                 title="Cadangkan Surat Terpilih ke Google Drive"
               >
                 <Cloud className="w-4 h-4" />
-                <span>Cadangkan ke Drive ({selectedIds.length})</span>
+                <span>Drive ({selectedIds.length})</span>
               </button>
-              <button onClick={handleBulkDelete} className="glass-button flex items-center justify-center gap-2 flex-1 sm:flex-none !bg-rose-500/10 text-rose-300 border-rose-500/20 hover:bg-rose-500/20" title="Hapus Terpilih">
+              <button onClick={handleBulkDelete} className="glass-button flex items-center justify-center gap-2 shrink-0 !bg-rose-500/10 text-rose-300 border-rose-500/20 hover:bg-rose-500/20" title="Hapus Terpilih">
                 <Trash className="w-4 h-4" />
-                <span className="hidden xl:inline">Hapus ({selectedIds.length})</span>
+                <span>Hapus ({selectedIds.length})</span>
               </button>
             </>
           )}
           <button 
             type="button" 
+            onClick={() => setIsDriveDbModalOpen(true)} 
+            className="glass-button flex items-center justify-center gap-2 shrink-0 !bg-sky-500/15 hover:!bg-sky-500/25 text-sky-300 border-sky-500/40 shadow-sm" 
+            title="Database Google Drive (Pusat Sinkronisasi & Cadangan Cloud)"
+          >
+            <Cloud className="w-4 h-4 text-sky-400" />
+            <span className="font-semibold">Database Drive</span>
+          </button>
+          <button 
+            type="button" 
             onClick={handleSeedData} 
-            className="glass-button flex items-center justify-center gap-2 flex-1 sm:flex-none !bg-amber-500/15 hover:!bg-amber-500/25 text-amber-300 border-amber-500/30 shadow-sm" 
+            className="glass-button flex items-center justify-center gap-2 shrink-0 !bg-amber-500/15 hover:!bg-amber-500/25 text-amber-300 border-amber-500/30 shadow-sm" 
             title="Lengkapi & Perbarui Data Register Surat & Arsip SMPN 3 Kras"
           >
             <Database className="w-4 h-4 text-amber-400" />
             <span className="hidden sm:inline font-medium">Lengkapi Data Contoh</span>
+            <span className="sm:hidden font-medium">Contoh</span>
           </button>
           <input 
             type="file" 
@@ -1420,33 +1439,33 @@ export default function Letters() {
             onChange={handleImport} 
             className="hidden" 
           />
-          <button onClick={() => fileInputRef.current?.click()} className="glass-button !bg-slate-500/20 flex items-center justify-center gap-2 flex-1 sm:flex-none" title="Impor Data File">
+          <button onClick={() => fileInputRef.current?.click()} className="glass-button !bg-slate-500/20 flex items-center justify-center gap-2 shrink-0" title="Impor Data File">
             <Upload className="w-4 h-4" />
             <span className="hidden xl:inline">Impor</span>
           </button>
-          <button onClick={handleExportPDF} className="glass-button flex items-center justify-center gap-2 flex-1 sm:flex-none !bg-rose-500/10 text-rose-300 border-rose-500/20 hover:bg-rose-500/20" title="Ekspor PDF">
+          <button onClick={handleExportPDF} className="glass-button flex items-center justify-center gap-2 shrink-0 !bg-rose-500/10 text-rose-300 border-rose-500/20 hover:bg-rose-500/20" title="Ekspor PDF">
             <FileIcon className="w-4 h-4" />
             <span className="hidden xl:inline">PDF</span>
           </button>
-          <button onClick={handleExportExcel} className="glass-button flex items-center justify-center gap-2 flex-1 sm:flex-none !bg-emerald-500/10 text-emerald-300 border-emerald-500/20 hover:bg-emerald-500/20" title="Ekspor Excel">
+          <button onClick={handleExportExcel} className="glass-button flex items-center justify-center gap-2 shrink-0 !bg-emerald-500/10 text-emerald-300 border-emerald-500/20 hover:bg-emerald-500/20" title="Ekspor Excel">
             <FileSpreadsheet className="w-4 h-4" />
             <span className="hidden xl:inline">Excel</span>
           </button>
-          <button onClick={handleExportWord} className="glass-button flex items-center justify-center gap-2 flex-1 sm:flex-none !bg-sky-500/10 text-sky-300 border-sky-500/20 hover:bg-sky-500/20" title="Ekspor Word">
+          <button onClick={handleExportWord} className="glass-button flex items-center justify-center gap-2 shrink-0 !bg-sky-500/10 text-sky-300 border-sky-500/20 hover:bg-sky-500/20" title="Ekspor Word">
             <FileText className="w-4 h-4" />
             <span className="hidden xl:inline">Word</span>
           </button>
-          <button onClick={handlePrint} className="glass-button flex items-center justify-center gap-2 flex-1 sm:flex-none" title="Cetak Daftar Surat">
+          <button onClick={handlePrint} className="glass-button flex items-center justify-center gap-2 shrink-0" title="Cetak Daftar Surat">
             <Printer className="w-4 h-4" />
             <span className="hidden xl:inline">Cetak</span>
           </button>
-          <button type="button" onClick={() => setIsWizardOpen(true)} className="glass-button flex items-center justify-center gap-2 flex-1 sm:flex-none !bg-sky-500 hover:!bg-sky-600 !text-white border-none shadow-md" title="Buat Draf Surat Resmi Otomatis">
+          <button type="button" onClick={() => setIsWizardOpen(true)} className="glass-button flex items-center justify-center gap-2 shrink-0 !bg-sky-500 hover:!bg-sky-600 !text-white border-none shadow-md font-semibold" title="Buat Draf Surat Resmi Otomatis">
             <Sparkles className="w-4 h-4 text-amber-300" />
-            <span className="hidden sm:inline font-semibold">Buat Draf</span>
+            <span>Buat Draf</span>
           </button>
-          <button type="button" onClick={() => { setFormLetterType('inbox'); setIsModalOpen(true); }} className="glass-button flex items-center justify-center gap-2 flex-1 sm:flex-none !bg-sky-500/20 text-sky-300 border border-sky-500/30 hover:bg-sky-500/30">
+          <button type="button" onClick={() => { setFormLetterType('inbox'); setIsModalOpen(true); }} className="glass-button flex items-center justify-center gap-2 shrink-0 !bg-sky-500/20 text-sky-300 border border-sky-500/30 hover:bg-sky-500/30 font-semibold">
             <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline font-semibold">Registrasi Surat</span>
+            <span>Registrasi</span>
           </button>
         </div>
       </div>
@@ -1584,7 +1603,7 @@ export default function Letters() {
             Filter { (selectedCategory !== 'all' || selectedStatus !== 'all' || selectedYear !== 'all' || sortBy !== 'date-desc') && <span className="w-2 h-2 rounded-full bg-sky-400"></span> }
           </button>
           
-          <div className="flex bg-slate-800/50 p-1 rounded-lg border border-white/5 w-full sm:w-auto flex-wrap">
+          <div className="flex bg-slate-800/50 p-1 rounded-lg border border-white/5 w-full sm:w-auto overflow-x-auto no-scrollbar flex-nowrap sm:flex-wrap shrink-0">
             {(['all', 'inbox', 'outbox', 'guru_wali'] as const).map(type => {
               const count = type === 'guru_wali' 
                 ? rawLetters.filter(l => l.source === 'portal_guru_wali' || Boolean(l.applicantName)).length 
@@ -1597,11 +1616,11 @@ export default function Letters() {
                 <button
                   key={type}
                   onClick={() => setFilterType(type)}
-                  className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all flex items-center justify-center gap-1.5 ${
+                  className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all flex items-center justify-center gap-1.5 shrink-0 whitespace-nowrap ${
                     filterType === type 
                       ? type === 'guru_wali'
-                        ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 shadow-sm'
-                        : 'bg-sky-500/20 text-sky-300 shadow-sm' 
+                        ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 shadow-sm font-bold'
+                        : 'bg-sky-500/20 text-sky-300 shadow-sm font-bold' 
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
@@ -1691,7 +1710,252 @@ export default function Letters() {
       </div>
 
       <div className="glass-panel overflow-hidden">
-        <div className="overflow-x-auto overflow-y-auto custom-scrollbar max-h-[calc(100vh-280px)] min-h-[300px]">
+        {/* Mobile Card List View (Visible on small screens) */}
+        <div className="block md:hidden print:hidden divide-y divide-white/5">
+          {letters?.length === 0 ? (
+            <div className="text-center py-10 px-4 text-slate-500">
+              <FileText className="w-12 h-12 mx-auto mb-2 opacity-20" />
+              <p className="text-slate-300 font-medium mb-1">Belum ada data surat yang terdaftar.</p>
+              <p className="text-xs text-slate-400 mb-4">Klik tombol di bawah untuk memuat paket data register surat resmi sekolah.</p>
+              <button 
+                type="button"
+                onClick={handleSeedData}
+                className="glass-button !bg-sky-500 hover:!bg-sky-600 !text-white text-xs font-semibold px-4 py-2"
+              >
+                <Database className="w-3.5 h-3.5 mr-1.5" />
+                Muat Contoh Data Surat
+              </button>
+            </div>
+          ) : (
+            letters?.map(letter => {
+              const isSelected = selectedIds.includes(letter.id as number);
+              const isPending = (letter.applicantName || letter.source === 'portal_guru_wali') && letter.submissionStatus === 'pending_approval';
+
+              return (
+                <div key={letter.id} className={`p-4 space-y-2.5 transition-colors ${isSelected ? 'bg-sky-500/10' : 'hover:bg-white/[0.02]'}`}>
+                  {/* Card Header: Checkbox, Badges, Date */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <input 
+                        type="checkbox" 
+                        className="rounded border-slate-600 bg-slate-800/50 text-sky-500 focus:ring-sky-500/50"
+                        checked={isSelected}
+                        onChange={() => toggleSelect(letter.id as number)}
+                      />
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${
+                        letter.type === 'inbox'
+                          ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20'
+                          : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                      }`}>
+                        {letter.type === 'inbox' ? 'Masuk' : 'Keluar'}
+                      </span>
+                      {letter.urgency && letter.urgency !== 'Biasa' && (
+                        <span className={`px-1.5 py-0.2 rounded text-[10px] font-medium border ${
+                          letter.urgency === 'Sangat Segera'
+                            ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                            : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                        }`}>
+                          {letter.urgency}
+                        </span>
+                      )}
+                    </div>
+
+                    <span className="text-[11px] text-slate-400 font-mono">
+                      {format(new Date(letter.date), 'dd/MM/yyyy')}
+                    </span>
+                  </div>
+
+                  {/* Reference Number & Quick Status */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenNumberAssignModal(letter, false)}
+                      className="font-mono text-xs font-bold text-sky-300 hover:text-sky-200 underline flex items-center gap-1"
+                      title="Ubah Nomor Surat"
+                    >
+                      <Hash className="w-3 h-3 text-sky-400" />
+                      <span>{letter.referenceNumber}</span>
+                    </button>
+
+                    {letter.isDraft && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                        <Sparkles className="w-2.5 h-2.5 text-amber-400" /> Draf
+                      </span>
+                    )}
+
+                    {letter.isAgendaOnly && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-medium bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                        <Tag className="w-2.5 h-2.5 text-amber-400" /> Agenda
+                      </span>
+                    )}
+
+                    {isPending && (
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse">
+                        Menunggu ACC
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Title & Category */}
+                  <div>
+                    <h4 className="text-xs font-bold text-white leading-snug line-clamp-2">
+                      {letter.title}
+                    </h4>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="px-2 py-0.5 rounded text-[10px] bg-white/5 border border-white/10 text-slate-300">
+                        {letter.category || '-'}
+                      </span>
+                      {letter.processingUnit && (
+                        <span className="text-[10px] text-slate-400 truncate">
+                          Unit: {letter.processingUnit}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Sender / Applicant */}
+                  <div className="flex items-center justify-between text-xs text-slate-300 pt-1 border-t border-white/5">
+                    {letter.applicantName ? (
+                      <div className="flex items-center gap-2 flex-wrap min-w-0">
+                        <span className="font-medium text-white truncate max-w-[150px]">{letter.applicantName}</span>
+                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase font-bold font-mono">
+                          {letter.applicantRole === 'guru' ? 'Guru' : letter.applicantRole === 'wali' ? 'Wali' : 'Pemohon'}
+                        </span>
+                        {letter.applicantPhone && (
+                          <a
+                            href={`https://wa.me/${letter.applicantPhone.replace(/[^0-9]/g, '').replace(/^0/, '62')}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-[11px] text-emerald-400 font-mono hover:underline"
+                            title="WhatsApp"
+                          >
+                            <MessageCircle className="w-3 h-3 text-emerald-400" />
+                            <span>{letter.applicantPhone}</span>
+                          </a>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="truncate max-w-[200px] text-slate-400">
+                        {letter.type === 'inbox' ? 'Dari: ' : 'Kepada: '}
+                        <strong className="text-slate-300">{letter.senderOrRecipient || '-'}</strong>
+                      </span>
+                    )}
+
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${
+                      letter.status === 'active'
+                        ? 'bg-sky-500/10 text-sky-400 border-sky-500/20'
+                        : 'bg-slate-500/10 text-slate-400 border-slate-500/20'
+                    }`}>
+                      {letter.status === 'active' ? 'Aktif' : 'Arsip'}
+                    </span>
+                  </div>
+
+                  {/* Mobile Actions Toolbar */}
+                  <div className="flex items-center justify-between pt-1 flex-wrap gap-1">
+                    {/* Primary actions */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {isPending && (
+                        <button
+                          type="button"
+                          onClick={() => handleApproveSubmission(letter, true)}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold flex items-center gap-1 shadow-sm"
+                          title="Setujui & Terbitkan"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>ACC & Cetak</span>
+                        </button>
+                      )}
+
+                      <button 
+                        onClick={() => handlePreviewOfficialLetter(letter, 'resmi')}
+                        className="px-2 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30 text-xs font-semibold flex items-center gap-1"
+                        title="Cetak Surat Resmi"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        <span>Resmi</span>
+                      </button>
+
+                      {(letter.applicantName || letter.source === 'portal_guru_wali') && (
+                        <button 
+                          onClick={() => handlePreviewOfficialLetter(letter, 'permohonan')}
+                          className="px-2 py-1 rounded-lg bg-sky-500/20 text-sky-300 hover:bg-sky-500/30 border border-sky-500/30 text-xs font-semibold flex items-center gap-1"
+                          title="Cetak Permohonan"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>Permohonan</span>
+                        </button>
+                      )}
+
+                      {letter.isAgendaOnly && (
+                        <button 
+                          onClick={() => handlePrintAgendaSlipDirect(letter)}
+                          className="px-2 py-1 rounded-lg bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/30 text-xs font-semibold flex items-center gap-1"
+                          title="Cetak Slip Agenda"
+                        >
+                          <Printer className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Slip Agenda</span>
+                        </button>
+                      )}
+
+                      {letter.type === 'inbox' && (
+                        <button 
+                          onClick={() => handleCetakDisposisi(letter)}
+                          className="px-2 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30 text-xs font-semibold flex items-center gap-1"
+                          title="Cetak Lembar Disposisi"
+                        >
+                          <ClipboardCheck className="w-3.5 h-3.5" />
+                          <span>Disposisi</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Secondary utility icons */}
+                    <div className="flex items-center gap-1">
+                      <button 
+                        onClick={() => handleDownloadLetterDocument(letter)}
+                        className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300"
+                        title="Unduh PDF"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                      </button>
+                      <button 
+                        onClick={() => handleOpenDriveModalSingle(letter)}
+                        className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-sky-400"
+                        title="Google Drive"
+                      >
+                        <Cloud className="w-3.5 h-3.5" />
+                      </button>
+                      <button 
+                        onClick={() => toggleArchive(letter)}
+                        className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300"
+                        title={letter.status === 'active' ? 'Arsipkan' : 'Aktifkan'}
+                      >
+                        <Archive className="w-3.5 h-3.5" />
+                      </button>
+                      <button 
+                        onClick={() => handleEditClick(letter)}
+                        className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-sky-400"
+                        title="Edit"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(letter.id)}
+                        className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400"
+                        title="Hapus"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Desktop / Print View: Table (Hidden on small screens) */}
+        <div className="hidden md:block print:block overflow-x-auto overflow-y-auto custom-scrollbar max-h-[calc(100vh-280px)] min-h-[300px]">
           <table className="glass-table relative">
             <thead>
               <tr className="print:border-b print:border-black">
@@ -2877,6 +3141,12 @@ export default function Letters() {
         orientation={printModalState.orientation || 'portrait'}
         onDownloadPdf={printModalState.onDownloadPdf}
         onDownloadWord={printModalState.onDownloadWord}
+      />
+
+      {/* Google Drive Cloud Database Modal */}
+      <GoogleDriveDatabaseModal
+        isOpen={isDriveDbModalOpen}
+        onClose={() => setIsDriveDbModalOpen(false)}
       />
     </motion.div>
   );

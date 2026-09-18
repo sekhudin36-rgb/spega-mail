@@ -27,7 +27,14 @@ import {
   EyeOff,
   KeyRound,
   Layers,
-  FileDown
+  FileDown,
+  ArrowLeftRight,
+  UploadCloud,
+  DownloadCloud,
+  HardDrive,
+  Clock,
+  UserCheck,
+  Info
 } from 'lucide-react';
 import { db } from '../lib/db';
 import { cn } from '../lib/utils';
@@ -41,6 +48,7 @@ import {
   DEFAULT_DRIVE_FOLDER_ID,
   signInWithGoogleDrive,
   signOutGoogleDrive,
+  switchGoogleDriveAccount,
   getGoogleAccessToken,
   getGoogleUser,
   verifyFolderAccess,
@@ -48,6 +56,12 @@ import {
   setAutoSyncEnabled
 } from '../lib/googleDrive';
 import GoogleDriveModal from '../components/GoogleDriveModal';
+import GoogleDriveDatabaseModal from '../components/GoogleDriveDatabaseModal';
+import { 
+  saveDatabaseToGoogleDrive,
+  DRIVE_DB_FILENAME,
+  DRIVE_DB_FOLDER_NAME
+} from '../lib/googleDriveDatabase';
 import AdminPinModal from '../components/AdminPinModal';
 import { generateFullUserManualPdf } from '../lib/pdfGuideHelper';
 import { getAdminPin, setAdminPin, isPinRequired, setPinRequired } from '../lib/authHelper';
@@ -218,6 +232,11 @@ export default function Settings() {
     message: ''
   });
   const [isDriveSyncModalOpen, setIsDriveSyncModalOpen] = useState(false);
+  const [isDriveDbModalOpen, setIsDriveDbModalOpen] = useState(false);
+  const [isSyncingQuick, setIsSyncingQuick] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(() => {
+    return typeof window !== 'undefined' ? localStorage.getItem('lastDriveDatabaseSync') : null;
+  });
 
   // UI State
   const [isSaved, setIsSaved] = useState(false);
@@ -274,6 +293,29 @@ export default function Settings() {
       setDriveToken(tok);
       setDriveUser(getGoogleUser());
     });
+
+    const onDriveSynced = (e: any) => {
+      setLastSyncTime(e?.detail?.updatedAt || localStorage.getItem('lastDriveDatabaseSync'));
+      getGoogleAccessToken().then(tok => {
+        setDriveToken(tok);
+        setDriveUser(getGoogleUser());
+      });
+    };
+    const onDriveConfigChanged = () => {
+      getGoogleAccessToken().then(tok => {
+        setDriveToken(tok);
+        setDriveUser(getGoogleUser());
+      });
+      setLastSyncTime(localStorage.getItem('lastDriveDatabaseSync'));
+    };
+
+    window.addEventListener('driveDatabaseSynced', onDriveSynced);
+    window.addEventListener('googleDriveConfigChanged', onDriveConfigChanged);
+
+    return () => {
+      window.removeEventListener('driveDatabaseSynced', onDriveSynced);
+      window.removeEventListener('googleDriveConfigChanged', onDriveConfigChanged);
+    };
   }, []);
 
   const handleDriveFolderInputChange = (val: string) => {
@@ -312,6 +354,44 @@ export default function Settings() {
       toast.error(err?.message || 'Gagal menghubungkan Google Drive');
     } finally {
       setIsAuthenticatingDrive(false);
+    }
+  };
+
+  const handleSwitchGoogleDrive = async () => {
+    setIsAuthenticatingDrive(true);
+    setDriveTestStatus({ status: 'idle', message: '' });
+    try {
+      const res = await switchGoogleDriveAccount();
+      if (res) {
+        setDriveToken(res.accessToken);
+        setDriveUser(res.user);
+        toast.success(`Akun database berhasil dialihkan ke: ${res.user.displayName || res.user.email}`);
+      } else {
+        toast('Pengalihan akun dibatalkan atau jendela ditutup', { icon: 'ℹ️' });
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Gagal mengganti akun Google');
+    } finally {
+      setIsAuthenticatingDrive(false);
+    }
+  };
+
+  const handleQuickSyncDatabase = async () => {
+    if (!driveToken) {
+      toast.error('Silakan hubungkan akun Google terlebih dahulu');
+      await handleConnectGoogleDrive();
+      return;
+    }
+
+    setIsSyncingQuick(true);
+    try {
+      const res = await saveDatabaseToGoogleDrive(driveToken, true);
+      setLastSyncTime(res.updatedAt);
+      toast.success('Database berhasil disimpan & disinkronkan ke Google Drive akun aktif!');
+    } catch (err: any) {
+      toast.error(err?.message || 'Gagal menyinkronkan database ke Google Drive');
+    } finally {
+      setIsSyncingQuick(false);
     }
   };
 
@@ -635,7 +715,7 @@ export default function Settings() {
 
   const tabs = [
     { id: 'profile', icon: Building, label: 'Profil Sekolah' },
-    { id: 'googledrive', icon: Cloud, label: 'Google Drive & Cloud' },
+    { id: 'googledrive', icon: Cloud, label: 'Database & Akun Google Drive' },
     { id: 'theme', icon: Palette, label: 'Tampilan & Tema' },
     { id: 'notifications', icon: Bell, label: 'Notifikasi' },
     { id: 'security', icon: ShieldCheck, label: 'Keamanan & Akses' },
@@ -973,73 +1053,129 @@ export default function Settings() {
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
                 className="space-y-6"
               >
-                {/* Panel 1: Akun & Koneksi */}
-                <div className="glass-panel p-6">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                {/* Panel 1: Akun & Database Google Drive */}
+                <div className="glass-panel p-6 space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
-                      <div className="p-3 rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-400">
+                      <div className="p-3 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-600 text-white shadow-lg shadow-sky-900/30">
                         <Cloud className="w-6 h-6" />
                       </div>
                       <div>
-                        <h3 className="text-xl font-medium text-white">Integrasi Google Drive</h3>
-                        <p className="text-xs text-slate-400">Simpan dan arsipkan surat otomatis ke Google Drive SMPN 3 Kras</p>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-xl font-medium text-white">Akun & Database Google Drive</h3>
+                          <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                            CLOUD DATABASE
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          Kelola akun Google yang aktif sebagai basis data cloud (<code className="text-sky-300">SPEGA_MAIL_DATABASE.json</code>) dan pusat arsip surat digital.
+                        </p>
                       </div>
                     </div>
 
-                    <a
-                      href={getDriveFolderUrl(driveFolderId)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="glass-button flex items-center justify-center gap-2 text-xs py-2 px-3 !bg-sky-500/10 hover:!bg-sky-500/20 !border-sky-500/30 text-sky-300 hover:text-white"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" /> Buka Folder Google Drive
-                    </a>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => setIsDriveDbModalOpen(true)}
+                        className="glass-button flex items-center justify-center gap-2 text-xs py-2 px-3 !bg-sky-600/30 hover:!bg-sky-600/50 !border-sky-500/50 text-white font-medium shadow"
+                      >
+                        <Database className="w-3.5 h-3.5 text-sky-400" /> Buka Panel Database Cloud
+                      </button>
+                      <a
+                        href={getDriveFolderUrl(driveFolderId)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="glass-button flex items-center justify-center gap-2 text-xs py-2 px-3 text-slate-300 hover:text-white"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" /> Buka di Drive
+                      </a>
+                    </div>
                   </div>
 
-                  {/* Status Koneksi Akun */}
+                  {/* Status & Pengaturan Akun Google Drive Aktif */}
                   <div className="bg-white/5 border border-white/10 rounded-xl p-5 space-y-4">
-                    <h4 className="text-xs font-semibold text-sky-400 uppercase tracking-wide">Status Autentikasi Google</h4>
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-semibold text-sky-400 uppercase tracking-wide flex items-center gap-1.5">
+                        <UserCheck className="w-3.5 h-3.5" /> Akun Google Drive Yang Digunakan
+                      </h4>
+                      {driveToken && (
+                        <span className="text-[11px] text-slate-400">
+                          Anda dapat beralih ke akun lain kapan saja
+                        </span>
+                      )}
+                    </div>
                     
                     {driveToken && driveUser ? (
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-                        <div className="flex items-center gap-3">
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 rounded-xl bg-slate-900/90 border border-slate-800">
+                        <div className="flex items-center gap-3 min-w-0">
                           {driveUser.photoURL ? (
-                            <img src={driveUser.photoURL} alt="Avatar" className="w-10 h-10 rounded-full border border-emerald-500/40" />
+                            <img src={driveUser.photoURL} alt="Avatar" className="w-11 h-11 rounded-full border border-sky-500/40 object-cover shrink-0" />
                           ) : (
-                            <div className="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-sm border border-emerald-500/30">
+                            <div className="w-11 h-11 rounded-full bg-sky-500/20 text-sky-400 flex items-center justify-center font-bold text-base border border-sky-500/30 shrink-0">
                               {driveUser.email?.charAt(0).toUpperCase() || 'G'}
                             </div>
                           )}
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <p className="text-sm font-semibold text-white">{driveUser.displayName || 'Akun Google Sekolah'}</p>
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-sm font-bold text-white truncate">{driveUser.displayName || 'Akun Google Sekolah'}</p>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                                 <Check className="w-3 h-3" /> Terhubung
                               </span>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                                Database Aktif
+                              </span>
                             </div>
-                            <p className="text-xs text-slate-300">{driveUser.email}</p>
+                            <p className="text-xs text-slate-400 font-mono truncate mt-0.5">{driveUser.email}</p>
                           </div>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={handleDisconnectGoogleDrive}
-                          className="glass-button text-xs py-1.5 px-3 text-slate-400 hover:text-rose-300 hover:border-rose-500/40"
-                        >
-                          Putuskan Akun
-                        </button>
+                        {/* Tombol Ganti Akun & Putuskan */}
+                        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={handleSwitchGoogleDrive}
+                            disabled={isAuthenticatingDrive}
+                            className="glass-button text-xs py-2 px-3.5 !bg-sky-500/20 hover:!bg-sky-500/30 !border-sky-500/40 text-sky-200 hover:text-white flex items-center gap-2 font-medium transition cursor-pointer"
+                            title="Ganti ke akun Google yang lain untuk database"
+                          >
+                            {isAuthenticatingDrive ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Menghubungkan...
+                              </>
+                            ) : (
+                              <>
+                                <ArrowLeftRight className="w-3.5 h-3.5 text-sky-400" />
+                                <span>Ganti Akun Google</span>
+                              </>
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={handleDisconnectGoogleDrive}
+                            className="glass-button text-xs py-2 px-3 text-slate-400 hover:text-rose-300 hover:border-rose-500/40 transition"
+                            title="Putuskan koneksi Google Drive saat ini"
+                          >
+                            Putuskan
+                          </button>
+                        </div>
                       </div>
                     ) : (
-                      <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div>
-                          <p className="text-sm font-medium text-white">Google Drive Belum Terhubung</p>
-                          <p className="text-xs text-slate-400 mt-0.5">Masuk dengan akun Google yang memiliki hak akses ke folder drive sekolah.</p>
+                      <div className="p-5 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                            <p className="text-sm font-semibold text-white">Akun Google Drive Belum Terhubung</p>
+                          </div>
+                          <p className="text-xs text-slate-400 leading-relaxed max-w-xl">
+                            Hubungkan akun Google Drive (misal: akun belajar.id atau email resmi sekolah) untuk mengaktifkan pencadangan dan sinkronisasi database surat secara otomatis.
+                          </p>
                         </div>
                         <button
                           type="button"
                           onClick={handleConnectGoogleDrive}
                           disabled={isAuthenticatingDrive}
-                          className="flex items-center justify-center gap-2 py-2 px-4 rounded-lg bg-white text-slate-800 font-medium text-xs hover:bg-slate-100 transition shadow cursor-pointer disabled:opacity-50"
+                          className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-white text-slate-900 font-semibold text-xs hover:bg-slate-100 transition shadow-lg cursor-pointer disabled:opacity-50 shrink-0"
                         >
                           {isAuthenticatingDrive ? (
                             <>
@@ -1047,18 +1183,83 @@ export default function Settings() {
                             </>
                           ) : (
                             <>
-                              <svg className="w-3.5 h-3.5" viewBox="0 0 48 48">
+                              <svg className="w-4 h-4" viewBox="0 0 48 48">
                                 <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
                                 <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
                                 <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
                                 <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
                               </svg>
-                              Sign in with Google
+                              Hubungkan Akun Google Drive
                             </>
                           )}
                         </button>
                       </div>
                     )}
+                  </div>
+
+                  {/* Panel Ringkasan Master Database Cloud */}
+                  <div className="bg-white/5 border border-white/10 rounded-xl p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-semibold text-sky-400 uppercase tracking-wide flex items-center gap-1.5">
+                        <Database className="w-3.5 h-3.5" /> Pusat Data Cloud ({DRIVE_DB_FILENAME})
+                      </h4>
+                      <span className="text-[11px] text-slate-400">
+                        Disimpan di Google Drive Akun Aktif
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 space-y-1">
+                        <span className="text-[11px] text-slate-400 block">Master Database</span>
+                        <span className="text-xs font-mono font-bold text-sky-300">{DRIVE_DB_FILENAME}</span>
+                      </div>
+
+                      <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 space-y-1">
+                        <span className="text-[11px] text-slate-400 block">Subfolder di Drive</span>
+                        <span className="text-xs font-semibold text-indigo-300 truncate block">{DRIVE_DB_FOLDER_NAME}</span>
+                      </div>
+
+                      <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800 space-y-1">
+                        <span className="text-[11px] text-slate-400 block">Sinkronisasi Terakhir</span>
+                        <span className="text-xs font-medium text-emerald-400 flex items-center gap-1">
+                          <Clock className="w-3 h-3 shrink-0" />
+                          {lastSyncTime ? new Date(lastSyncTime).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }) : 'Belum pernah'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        Data surat masuk/keluar, berkas lampiran, guru, dan siswa dicadangkan ke akun Google Drive yang aktif.
+                      </p>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={handleQuickSyncDatabase}
+                          disabled={isSyncingQuick || !driveToken}
+                          className="glass-button text-xs py-2 px-3.5 !bg-sky-600 hover:!bg-sky-500 text-white font-semibold flex items-center gap-1.5 shadow disabled:opacity-50"
+                        >
+                          {isSyncingQuick ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" /> Menyimpan...
+                            </>
+                          ) : (
+                            <>
+                              <UploadCloud className="w-3.5 h-3.5" /> Cadangkan Sekarang
+                            </>
+                          )}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setIsDriveDbModalOpen(true)}
+                          className="glass-button text-xs py-2 px-3 text-slate-300 hover:text-white flex items-center gap-1.5"
+                        >
+                          <DownloadCloud className="w-3.5 h-3.5 text-sky-400" /> Tarik / Pulihkan Data
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Pengaturan URL & ID Folder */}
@@ -1687,6 +1888,12 @@ export default function Settings() {
         isOpen={isDriveSyncModalOpen}
         onClose={() => setIsDriveSyncModalOpen(false)}
         mode="syncAll"
+      />
+
+      {/* Modal Pengaturan Database Google Drive (Push / Pull / Ganti Akun) */}
+      <GoogleDriveDatabaseModal
+        isOpen={isDriveDbModalOpen}
+        onClose={() => setIsDriveDbModalOpen(false)}
       />
     </motion.div>
   );

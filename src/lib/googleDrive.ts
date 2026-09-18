@@ -136,9 +136,28 @@ export const getGoogleUser = (): User | null => {
 };
 
 export const signOutGoogleDrive = async () => {
-  await firebaseSignOut(auth);
+  try {
+    await firebaseSignOut(auth);
+  } catch (e) {
+    console.warn('SignOut error:', e);
+  }
   cachedAccessToken = null;
   cachedUser = null;
+  localStorage.removeItem('lastDriveDatabaseSync');
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('googleDriveConfigChanged'));
+    window.dispatchEvent(new CustomEvent('driveDatabaseSynced', { detail: { updatedAt: null } }));
+  }
+};
+
+export const switchGoogleDriveAccount = async (): Promise<{ user: User; accessToken: string } | null> => {
+  await signOutGoogleDrive();
+  const res = await signInWithGoogleDrive();
+  if (res && typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('googleDriveConfigChanged'));
+    window.dispatchEvent(new CustomEvent('driveDatabaseSynced', { detail: { updatedAt: new Date().toISOString() } }));
+  }
+  return res;
 };
 
 // Google Drive API Helpers
