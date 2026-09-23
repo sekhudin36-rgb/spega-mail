@@ -95,6 +95,48 @@ export interface Archive {
   createdAt: string;
 }
 
+export interface LegalisirRequest {
+  id?: number;
+  ticketNumber: string; // contoh: "LEG-2026/08-001"
+  documentType: 'ijazah' | 'skl' | 'rapor' | 'piagam' | 'skpi' | 'lainnya';
+  documentName: string; // contoh: "Ijazah SMP Negeri 3 Kras"
+  documentNumber: string; // Nomor Seri Ijazah / SKL / Dokumen
+  applicantName: string;
+  applicantType: 'alumni' | 'siswa' | 'wali' | 'instansi';
+  nisn?: string;
+  nis?: string;
+  gradeOrClass?: string;
+  graduationYear: string; // contoh: "2024"
+  birthPlaceDate?: string;
+  parentName?: string;
+  phone: string; // WhatsApp aktif
+  email?: string;
+  numberOfCopies: number; // Jumlah lembar fotokopi yang disahkan (1-10)
+  purpose: string; // Keperluan pengesahan
+  destinationInstitution?: string; // Instansi/sekolah tujuan
+  deliveryMethod: 'ambil_langsung' | 'diwakilkan' | 'pos_ekspedisi';
+  representativeName?: string; // Nama yang diberi kuasa
+  representativePhone?: string;
+  status: 'pending' | 'verified' | 'signed' | 'ready' | 'completed' | 'rejected';
+  rejectionReason?: string;
+  submittedAt: string; // ISO string
+  verifiedAt?: string;
+  verifiedBy?: string;
+  signedAt?: string;
+  readyAt?: string;
+  completedAt?: string;
+  takenBy?: string;
+  takenDate?: string;
+  fileUrl?: string; // scan/foto dokumen asli
+  fileName?: string;
+  fileType?: string;
+  driveFileUrl?: string;
+  driveFileId?: string;
+  adminNotes?: string;
+  qrVerificationCode: string; // Kode verifikasi keabsahan dokumen
+  pickupSchedule?: string;
+}
+
 export interface SystemLog {
   id?: number;
   timestamp: string; // ISO string
@@ -113,6 +155,7 @@ const db = new Dexie('SekolahPersuratanDB') as Dexie & {
   letters: EntityTable<Letter, 'id'>;
   archives: EntityTable<Archive, 'id'>;
   systemLogs: EntityTable<SystemLog, 'id'>;
+  legalisir: EntityTable<LegalisirRequest, 'id'>;
 };
 
 db.version(1).stores({
@@ -159,6 +202,15 @@ db.version(7).stores({
   letters: '++id, type, referenceNumber, title, senderOrRecipient, date, status, createdAt, indexData, sequenceNumber, code',
   archives: '++id, title, classificationCode, category, referenceNumber, date, status, storageLocation, createdAt',
   systemLogs: '++id, timestamp, action, category, level, user'
+});
+
+db.version(8).stores({
+  teachers: '++id, name, nip, subject, createdAt',
+  students: '++id, name, nisn, grade, createdAt',
+  letters: '++id, type, referenceNumber, title, senderOrRecipient, date, status, createdAt, indexData, sequenceNumber, code',
+  archives: '++id, title, classificationCode, category, referenceNumber, date, status, storageLocation, createdAt',
+  systemLogs: '++id, timestamp, action, category, level, user',
+  legalisir: '++id, ticketNumber, applicantName, nisn, graduationYear, documentType, status, submittedAt'
 });
 
 db.on('populate', async () => {
@@ -253,6 +305,7 @@ db.on('populate', async () => {
   await db.letters.bulkAdd(INITIAL_LETTERS_DATA);
   await db.archives.bulkAdd(INITIAL_ARCHIVES_DATA);
   await db.systemLogs.bulkAdd(INITIAL_SYSTEM_LOGS_DATA);
+  await db.legalisir.bulkAdd(INITIAL_LEGALISIR_DATA);
 });
 
 export const COMMON_LETTER_CODES = [
@@ -866,11 +919,164 @@ export async function seedCompleteSchoolData(overwrite = false): Promise<{ lette
     await db.systemLogs.bulkAdd(INITIAL_SYSTEM_LOGS_DATA);
   }
 
+  const existingLegalisir = await db.legalisir.count();
+  if (existingLegalisir === 0) {
+    await db.legalisir.bulkAdd(INITIAL_LEGALISIR_DATA);
+  }
+
   return { 
     lettersCount: lettersToAdd.length, 
     archivesCount: archivesToAdd.length,
     logsCount: await db.systemLogs.count() 
   };
+}
+
+export const INITIAL_LEGALISIR_DATA: Omit<LegalisirRequest, 'id'>[] = [
+  {
+    ticketNumber: 'LEG-2026/08-001',
+    documentType: 'ijazah',
+    documentName: 'Ijazah SMP Negeri 3 Kras',
+    documentNumber: 'DN-05/DI-06/0129845',
+    applicantName: 'Ahmad Faiz Al-Ghifari',
+    applicantType: 'alumni',
+    nisn: '0089123456',
+    nis: '4210',
+    graduationYear: '2024',
+    birthPlaceDate: 'Kediri, 12 April 2009',
+    parentName: 'H. Sutrisno',
+    phone: '082134567891',
+    email: 'faiz.ghifari@siswa.smp.belajar.id',
+    numberOfCopies: 5,
+    purpose: 'Persyaratan Pendaftaran SMA Negeri 1 Kandat & Seleksi Jalur Prestasi',
+    destinationInstitution: 'SMA Negeri 1 Kandat Kediri',
+    deliveryMethod: 'ambil_langsung',
+    status: 'ready',
+    submittedAt: '2026-08-15T08:30:00.000Z',
+    verifiedAt: '2026-08-15T10:15:00.000Z',
+    verifiedBy: 'Khabibu Rohman, S.Kom.',
+    signedAt: '2026-08-15T11:45:00.000Z',
+    readyAt: '2026-08-15T13:00:00.000Z',
+    adminNotes: 'Data sesuai dengan Buku Induk Siswa No. 4210. Ijazah asli telah diverifikasi valid.',
+    qrVerificationCode: 'SPEGA-LEG-2026-0129845-AFG',
+    pickupSchedule: 'Senin - Jumat (08.00 - 14.00 WIB) di Loket TU'
+  },
+  {
+    ticketNumber: 'LEG-2026/08-002',
+    documentType: 'ijazah',
+    documentName: 'Ijazah SMP Negeri 3 Kras',
+    documentNumber: 'DN-05/DI-06/0129846',
+    applicantName: 'Zahra Putri Ramadhani',
+    applicantType: 'alumni',
+    nisn: '0098765432',
+    nis: '4211',
+    graduationYear: '2024',
+    birthPlaceDate: 'Kediri, 24 September 2009',
+    parentName: 'Bambang Irawan',
+    phone: '082245678902',
+    numberOfCopies: 3,
+    purpose: 'Kelengkapan Berkas Administrasi PPDB SMK Negeri 1 Kras',
+    destinationInstitution: 'SMK Negeri 1 Kras',
+    deliveryMethod: 'ambil_langsung',
+    status: 'completed',
+    submittedAt: '2026-08-10T09:00:00.000Z',
+    verifiedAt: '2026-08-10T10:00:00.000Z',
+    verifiedBy: 'Khabibu Rohman, S.Kom.',
+    signedAt: '2026-08-10T11:30:00.000Z',
+    readyAt: '2026-08-10T13:00:00.000Z',
+    completedAt: '2026-08-11T09:30:00.000Z',
+    takenBy: 'Zahra Putri Ramadhani (Sendiri)',
+    takenDate: '2026-08-11',
+    adminNotes: 'Telah diserahkan 3 lembar fotokopi terlegalisir stempel basah kepada yang bersangkutan.',
+    qrVerificationCode: 'SPEGA-LEG-2026-0129846-ZPR',
+    pickupSchedule: 'Telah Diambil di Ruang TU'
+  },
+  {
+    ticketNumber: 'LEG-2026/08-003',
+    documentType: 'ijazah',
+    documentName: 'Ijazah & Transkrip Nilai SMP Negeri 3 Kras',
+    documentNumber: 'DN-05/DI-06/0098421',
+    applicantName: 'Dimas Wahyu Pratama',
+    applicantType: 'alumni',
+    nisn: '0078129034',
+    nis: '3980',
+    graduationYear: '2023',
+    birthPlaceDate: 'Kediri, 05 Maret 2008',
+    parentName: 'Supriyadi',
+    phone: '081299887766',
+    numberOfCopies: 5,
+    purpose: 'Pemberkasan Seleksi Penerimaan Calon Bintara TNI-AD TA 2026/2027',
+    destinationInstitution: 'Ajenrem 082/CPYJ Mojokerto',
+    deliveryMethod: 'diwakilkan',
+    representativeName: 'Supriyadi (Ayah Kandung)',
+    representativePhone: '081299887760',
+    status: 'signed',
+    submittedAt: '2026-08-16T08:00:00.000Z',
+    verifiedAt: '2026-08-16T09:30:00.000Z',
+    verifiedBy: 'Khabibu Rohman, S.Kom.',
+    signedAt: '2026-08-16T11:00:00.000Z',
+    adminNotes: 'Menunggu proses pembubuhan cap dinas sekolah dan stempel legalisir basah.',
+    qrVerificationCode: 'SPEGA-LEG-2026-0098421-DWP',
+    pickupSchedule: 'Siap diambil mulai esok hari pk. 09.00 WIB'
+  },
+  {
+    ticketNumber: 'LEG-2026/08-004',
+    documentType: 'rapor',
+    documentName: 'Buku Rapor Semester 1 s.d 5 Terlegalisir',
+    documentNumber: 'RAPOR-0089123456/2026',
+    applicantName: 'Nur Aini Safitri',
+    applicantType: 'siswa',
+    nisn: '0089123499',
+    nis: '4225',
+    graduationYear: '2025',
+    birthPlaceDate: 'Kediri, 17 Agustus 2009',
+    parentName: 'Mohamad Sholeh',
+    phone: '085811223344',
+    numberOfCopies: 2,
+    purpose: 'Pendaftaran Program Beasiswa Bakti Pendidikan Pemkab Kediri',
+    destinationInstitution: 'Dinas Pendidikan Kabupaten Kediri',
+    deliveryMethod: 'ambil_langsung',
+    status: 'verified',
+    submittedAt: '2026-08-17T08:45:00.000Z',
+    verifiedAt: '2026-08-17T10:00:00.000Z',
+    verifiedBy: 'Khabibu Rohman, S.Kom.',
+    adminNotes: 'Berkas fotokopi rapor 5 semester telah dicocokkan dengan leger nilai kurikulum merdeka.',
+    qrVerificationCode: 'SPEGA-LEG-2026-RAPOR-NAS',
+    pickupSchedule: 'Menunggu penandatanganan Kepala Sekolah'
+  },
+  {
+    ticketNumber: 'LEG-2026/08-005',
+    documentType: 'ijazah',
+    documentName: 'Ijazah SMP Negeri 3 Kras',
+    documentNumber: 'DN-05/DI-06/0087112',
+    applicantName: 'Muhammad Rayhan Saputra',
+    applicantType: 'alumni',
+    nisn: '0067445566',
+    nis: '3750',
+    graduationYear: '2022',
+    birthPlaceDate: 'Kediri, 10 November 2006',
+    parentName: 'Budi Santoso',
+    phone: '081377889900',
+    numberOfCopies: 5,
+    purpose: 'Kelengkapan Berkas Pendaftaran Calon Pegawai Negeri Sipil (CPNS)',
+    destinationInstitution: 'Kementerian Pendidikan, Kebudayaan, Riset, dan Teknologi',
+    deliveryMethod: 'ambil_langsung',
+    status: 'pending',
+    submittedAt: '2026-08-17T11:20:00.000Z',
+    adminNotes: 'Permohonan baru masuk via portal alumni. Menunggu pengecekan fisik ijazah asli dan buku induk.',
+    qrVerificationCode: 'SPEGA-LEG-2026-0087112-MRS',
+    pickupSchedule: 'Dalam antrean verifikasi loket TU'
+  }
+];
+
+export async function ensureLegalisirSeeded(): Promise<void> {
+  try {
+    const count = await db.legalisir.count();
+    if (count === 0) {
+      await db.legalisir.bulkAdd(INITIAL_LEGALISIR_DATA);
+    }
+  } catch (e) {
+    console.warn('Gagal memverifikasi seed legalisir:', e);
+  }
 }
 
 export { db };

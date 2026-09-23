@@ -31,8 +31,8 @@ export default function AdminPinModal({
   isOpen,
   onClose,
   onSuccess,
-  title = 'Akses Masuk Portal Admin TU',
-  subtitle = 'Masukkan PIN keamanan untuk membuka dasbor manajemen surat & arsip sekolah',
+  title = 'Verifikasi Akses Khusus Tata Usaha',
+  subtitle = 'Area terbatas petugas. Masukkan PIN keamanan untuk membuka Portal Admin TU',
   isTestMode = false
 }: AdminPinModalProps) {
   const navigate = useNavigate();

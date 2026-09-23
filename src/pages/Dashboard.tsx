@@ -26,7 +26,8 @@ import {
   FileCheck,
   Send,
   HelpCircle,
-  ExternalLink
+  ExternalLink,
+  Award
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -75,6 +76,12 @@ export default function Dashboard() {
     const pendingSubmissions = letters.filter(l => (l.source === 'portal_guru_wali' || Boolean(l.applicantName)) && l.submissionStatus === 'pending_approval');
     const pendingSubmissionsCount = pendingSubmissions.length;
     
+    // Legalisir stats
+    const legalisirList = await db.legalisir.toArray();
+    const legalisirCount = legalisirList.length;
+    const legalisirPending = legalisirList.filter(l => l.status === 'pending').length;
+    const legalisirReady = legalisirList.filter(l => l.status === 'ready').length;
+
     // Sort recent letters
     const recentLetters = [...letters].sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime()).slice(0, 6);
 
@@ -126,7 +133,9 @@ export default function Dashboard() {
 
     return { 
       lettersCount, inboxCount, outboxCount, archivedCount, activeCount, 
-      archivesCount, teachersCount, studentsCount, pendingSubmissionsCount, recentLetters, chartData, 
+      archivesCount, teachersCount, studentsCount, pendingSubmissionsCount, 
+      legalisirCount, legalisirPending, legalisirReady,
+      recentLetters, chartData, 
       topCategories, pieData 
     };
   });
@@ -191,6 +200,18 @@ export default function Dashboard() {
       tagline: 'Berkas Fisik & Digital',
       badge: 'TERKLASIFIKASI',
       onClick: () => navigate('/archives')
+    },
+    { 
+      label: 'LEGALISIR IJAZAH', 
+      value: stats.legalisirCount, 
+      icon: Award, 
+      color: 'text-rose-400',
+      bgGlow: 'from-rose-500/10 to-transparent',
+      borderColor: 'border-rose-500/30',
+      iconBg: 'bg-rose-500/15 text-rose-400',
+      tagline: stats.legalisirPending > 0 ? `${stats.legalisirPending} Berkas Menunggu` : `${stats.legalisirCount} Berkas Terdaftar`,
+      badge: stats.legalisirPending > 0 ? 'PERLU PROSES' : 'LOKET TU',
+      onClick: () => navigate('/admin/legalisir')
     },
     { 
       label: 'SIVITAS SEKOLAH', 
@@ -258,6 +279,14 @@ export default function Dashboard() {
             </button>
 
             <button 
+              onClick={() => navigate('/admin/legalisir')} 
+              className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-amber-600/80 to-rose-600/80 hover:from-amber-500 hover:to-rose-500 border border-amber-400/40 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-md shadow-amber-950/40 hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <Award className="w-4 h-4 text-amber-200" />
+              Loket Legalisir
+            </button>
+
+            <button 
               onClick={() => navigate('/reports')} 
               className="px-3.5 py-2.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium flex items-center gap-1.5 transition-colors shadow-sm"
             >
@@ -267,6 +296,37 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* ALERT BANNER: PENDING LEGALISIR REQUESTS */}
+      {stats.legalisirPending > 0 && (
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="p-4 rounded-xl bg-gradient-to-r from-amber-950/60 via-slate-900 to-indigo-950/60 border border-amber-500/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl"
+        >
+          <div className="flex items-center gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+              <Award className="w-5 h-5 animate-pulse" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-2 flex-wrap">
+                <span>{stats.legalisirPending} Permohonan Legalisir Ijazah & Dokumen Menunggu Proses</span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-slate-950 animate-pulse">
+                  Loket Legalisir
+                </span>
+              </h3>
+              <p className="text-xs text-slate-300">Terdapat berkas pengesahan ijazah / dokumen alumni & siswa yang siap diverifikasi, ditandatangani, dan dicap pengesahan.</p>
+            </div>
+          </div>
+          <button 
+            onClick={() => navigate('/admin/legalisir')}
+            className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-md shadow-amber-950/50 transition-colors flex items-center gap-1.5 shrink-0 self-start sm:self-auto"
+          >
+            <span>Buka Loket Legalisir</span>
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </motion.div>
+      )}
 
       {/* ALERT BANNER: PENDING GURU & WALI SUBMISSIONS */}
       {stats.pendingSubmissionsCount > 0 && (
@@ -300,7 +360,7 @@ export default function Dashboard() {
       )}
 
       {/* 2. STATISTIC METRIC CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
         {statCards.map((stat, idx) => {
           const Icon = stat.icon;
           return (

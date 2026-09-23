@@ -1,6 +1,6 @@
 {
   "name": "Remix SPEGA MAIL v3 - Persuratan \u0026 Arsip",
-  "description": "Sistem Persuratan, Tata Usaha, dan Arsip Digital SMP Negeri 3 Kras Kediri dengan rekapitulasi buku agenda, kartu kendali, lembar disposisi, dan pembuatan draf surat otomatis.",
+  "description": "Sistem Persuratan, Tata Usaha, Layanan Legalisir Ijazah, dan Arsip Digital SMP Negeri 3 Kras Kediri dengan rekapitulasi buku agenda, kartu kendali, lembar disposisi, dan pembuatan draf surat otomatis.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

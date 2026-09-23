@@ -268,46 +268,195 @@
     border-radius: 4px;
   }
 
-  body.theme-light {
+  /* ==========================================================
+     TAMPILAN PUTIH (CLEAN LIGHT THEME - RESMI KEDINASAN / SEKOLAH)
+     ========================================================== */
+  body.theme-light,
+  body.theme-white {
     --bg-base: #f8fafc;
-    --bg-glass: rgba(255, 255, 255, 0.75);
-    --border-glass: rgba(0, 0, 0, 0.15);
+    --bg-surface: #ffffff;
+    --bg-glass: #ffffff;
+    --border-glass: #e2e8f0;
+    --accent-rgb: 79, 70, 229;
+    --accent-glow: rgba(79, 70, 229, 0.2);
+    --accent-text: #4f46e5;
     --text-primary: #0f172a;
     --text-secondary: #475569;
+    background-color: #f8fafc !important;
+    color: #0f172a !important;
     background-image: 
-      radial-gradient(circle at 15% 50%, rgba(var(--accent-rgb), 0.1) 0%, transparent 50%),
-      radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.1) 0%, transparent 50%) !important;
+      radial-gradient(circle at 15% 10%, rgba(99, 102, 241, 0.05) 0%, transparent 40%),
+      radial-gradient(circle at 85% 20%, rgba(14, 165, 233, 0.05) 0%, transparent 40%),
+      linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%) !important;
   }
-  
-  body.theme-light .text-white { color: var(--text-primary) !important; }
+
+  /* Root Surfaces & Layout in Tampilan Putih */
+  body.theme-light main,
+  body.theme-light .bg-\[\#0F172A\],
+  body.theme-light .bg-\[\#0B0E14\],
+  body.theme-light .bg-\[\#030712\],
+  body.theme-light .min-h-screen.bg-\[\#030712\],
+  body.theme-light .min-h-screen.bg-\[\#0B0E14\],
+  body.theme-light .min-h-screen.bg-\[\#0F172A\] {
+    background-color: #f8fafc !important;
+    color: #0f172a !important;
+  }
+
+  body.theme-light header {
+    background-color: rgba(255, 255, 255, 0.95) !important;
+    border-color: #e2e8f0 !important;
+    backdrop-filter: blur(12px) !important;
+  }
+
+  body.theme-light aside {
+    background-color: #ffffff !important;
+    border-color: #e2e8f0 !important;
+  }
+
+  /* Panels, Cards & Glass Elements in Tampilan Putih */
+  body.theme-light .glass-panel,
+  body.theme-light .bg-slate-900,
+  body.theme-light .bg-slate-900\/90,
+  body.theme-light .bg-slate-900\/80,
+  body.theme-light .bg-slate-900\/70,
+  body.theme-light .bg-slate-900\/60,
+  body.theme-light .bg-slate-900\/50,
+  body.theme-light .bg-slate-950,
+  body.theme-light .bg-slate-950\/90,
+  body.theme-light .bg-slate-950\/80,
+  body.theme-light .bg-slate-950\/70,
+  body.theme-light .bg-slate-950\/60,
+  body.theme-light .bg-slate-950\/50,
+  body.theme-light .bg-\[\#1E293B\] {
+    background-color: #ffffff !important;
+    border-color: #e2e8f0 !important;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 10px 20px -5px rgba(0, 0, 0, 0.04) !important;
+  }
+
+  /* Text Contrast & Colors in Tampilan Putih */
+  body.theme-light .text-white { color: #0f172a !important; }
+  body.theme-light .text-slate-100 { color: #0f172a !important; }
   body.theme-light .text-slate-200 { color: #1e293b !important; }
   body.theme-light .text-slate-300 { color: #334155 !important; }
-  body.theme-light .text-slate-400 { color: var(--text-secondary) !important; }
+  body.theme-light .text-slate-400 { color: #64748b !important; }
   body.theme-light .text-slate-500 { color: #64748b !important; }
-  body.theme-light .bg-white\/5 { background-color: rgba(0, 0, 0, 0.05) !important; }
-  body.theme-light .bg-white\/10 { background-color: rgba(0, 0, 0, 0.08) !important; }
-  body.theme-light .border-white\/5,
-  body.theme-light .border-white\/10 { border-color: rgba(0, 0, 0, 0.1) !important; }
-  body.theme-light .border-white\/20 { border-color: rgba(0, 0, 0, 0.2) !important; }
-  body.theme-light .bg-black\/20 { background-color: rgba(0, 0, 0, 0.04) !important; }
-  body.theme-light .glass-input { 
-    background: rgba(255, 255, 255, 0.8) !important;
-    color: var(--text-primary) !important;
+
+  /* Keep white text on bright colored buttons & badges */
+  body.theme-light .bg-indigo-600,
+  body.theme-light .bg-indigo-700,
+  body.theme-light .bg-emerald-600,
+  body.theme-light .bg-emerald-700,
+  body.theme-light .bg-rose-600,
+  body.theme-light .bg-rose-700,
+  body.theme-light .bg-sky-600,
+  body.theme-light .bg-blue-600,
+  body.theme-light .bg-amber-600,
+  body.theme-light .bg-indigo-600 .text-white,
+  body.theme-light .bg-emerald-600 .text-white,
+  body.theme-light .bg-rose-600 .text-white,
+  body.theme-light .bg-sky-600 .text-white {
+    color: #ffffff !important;
   }
-  body.theme-light .glass-input::placeholder { color: #94a3b8 !important; }
-  body.theme-light .glass-table tr:hover td { background: rgba(0, 0, 0, 0.04) !important; }
+
+  /* Subtle background and borders in Tampilan Putih */
+  body.theme-light .bg-white\/5,
+  body.theme-light .bg-white\/10 { 
+    background-color: rgba(15, 23, 42, 0.04) !important; 
+  }
+  body.theme-light .border-white\/5,
+  body.theme-light .border-white\/10,
+  body.theme-light .border-white\/20,
+  body.theme-light .border-slate-800,
+  body.theme-light .border-slate-700,
+  body.theme-light .border-\[\#1E293B\] { 
+    border-color: #e2e8f0 !important; 
+  }
+  body.theme-light .bg-black\/20,
+  body.theme-light .bg-black\/40,
+  body.theme-light .bg-black\/50 { 
+    background-color: rgba(15, 23, 42, 0.03) !important; 
+  }
+
+  body.theme-light .bg-slate-800,
+  body.theme-light .bg-slate-800\/80,
+  body.theme-light .bg-slate-800\/60,
+  body.theme-light .bg-slate-800\/50,
+  body.theme-light .bg-slate-800\/40 {
+    background-color: #f1f5f9 !important;
+    color: #1e293b !important;
+  }
+
+  body.theme-light .bg-slate-800:hover,
+  body.theme-light .bg-slate-800\/80:hover {
+    background-color: #e2e8f0 !important;
+  }
+
+  /* Form Elements in Tampilan Putih */
+  body.theme-light .glass-input,
+  body.theme-light input[type="text"],
+  body.theme-light input[type="search"],
+  body.theme-light input[type="date"],
+  body.theme-light input[type="number"],
+  body.theme-light input[type="password"],
+  body.theme-light select,
+  body.theme-light textarea { 
+    background: #ffffff !important;
+    color: #0f172a !important;
+    border-color: #cbd5e1 !important;
+  }
+  body.theme-light .glass-input::placeholder,
+  body.theme-light input::placeholder,
+  body.theme-light textarea::placeholder { 
+    color: #94a3b8 !important; 
+  }
+  body.theme-light select option {
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  /* Buttons & Action Controls in Tampilan Putih */
   body.theme-light .glass-button {
-    background: rgba(var(--accent-rgb), 0.1) !important;
-    border-color: rgba(var(--accent-rgb), 0.2) !important;
+    background: #f8fafc !important;
+    border-color: #cbd5e1 !important;
+    color: #1e293b !important;
   }
   body.theme-light .glass-button:hover {
-    background: rgba(var(--accent-rgb), 0.15) !important;
-    box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.2) !important;
+    background: #f1f5f9 !important;
+    border-color: #94a3b8 !important;
+    color: #0f172a !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
   }
+
+  /* Active Navigation Items */
   body.theme-light .nav-active {
-    background-color: rgba(var(--accent-rgb), 0.1) !important;
+    background-color: #eef2ff !important;
+    color: #4f46e5 !important;
+    border-color: #c7d2fe !important;
     box-shadow: none !important;
   }
+
+  /* Table styling in Tampilan Putih */
+  body.theme-light table thead tr {
+    background-color: #f8fafc !important;
+    color: #475569 !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+  }
+  body.theme-light table tbody tr {
+    border-bottom: 1px solid #f1f5f9 !important;
+  }
+  body.theme-light table tbody tr:hover td { 
+    background-color: #f8fafc !important; 
+  }
+
+  /* Modal Backdrop in Tampilan Putih */
+  body.theme-light .fixed.inset-0.bg-slate-950\/75,
+  body.theme-light .fixed.inset-0.bg-slate-950\/80,
+  body.theme-light .fixed.inset-0.bg-black\/75,
+  body.theme-light .fixed.inset-0.bg-black\/80 {
+    background-color: rgba(15, 23, 42, 0.5) !important;
+    backdrop-filter: blur(4px) !important;
+  }
+
 
   body.theme-cyberpunk {
     --bg-base: #050510;

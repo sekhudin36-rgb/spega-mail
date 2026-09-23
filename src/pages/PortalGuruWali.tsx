@@ -39,7 +39,8 @@ import {
   Palette,
   Lock,
   KeyRound,
-  FileDown
+  FileDown,
+  Award
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
@@ -51,6 +52,11 @@ import { jsPDF } from 'jspdf';
 import QuickAgendaModal from '../components/QuickAgendaModal';
 import CanvaPosterModal from '../components/CanvaPosterModal';
 import AdminPinModal from '../components/AdminPinModal';
+import AppLogo from '../components/AppLogo';
+import SecretAdminMarker, { useSecretAdminShortcut } from '../components/SecretAdminTrigger';
+import ThemeToggleButton from '../components/ThemeToggleButton';
+import PortalBottomNav from '../components/PortalBottomNav';
+import { MobilePWAFloatingPrompt, MobilePWAHeaderButton } from '../components/MobilePWAInstall';
 import { triggerBackgroundDriveDatabaseSync } from '../lib/googleDriveDatabase';
 import { generateFullUserManualPdf } from '../lib/pdfGuideHelper';
 import { 
@@ -87,8 +93,12 @@ interface ApplicantSession {
 export default function PortalGuruWali() {
   const navigate = useNavigate();
   const [session, setSession] = useState<ApplicantSession | null>(() => {
-    const saved = sessionStorage.getItem('applicantSession');
-    return saved ? JSON.parse(saved) : null;
+    try {
+      const saved = sessionStorage.getItem('applicantSession');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
   });
 
   // Login form state
@@ -163,6 +173,9 @@ export default function PortalGuruWali() {
   const [isQuickAgendaModalOpen, setIsQuickAgendaModalOpen] = useState(false);
   const [isCanvaModalOpen, setIsCanvaModalOpen] = useState(false);
   const [isAdminPinModalOpen, setIsAdminPinModalOpen] = useState(false);
+
+  // Secret admin shortcut listener (Ctrl+Shift+A or Alt+A)
+  useSecretAdminShortcut(() => setIsAdminPinModalOpen(true));
 
   // Sync kode klasifikasi ketika template kategori berubah
   useEffect(() => {
@@ -754,7 +767,17 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
             <span className="text-slate-500 text-xs">•</span>
             <span className="text-[11px] sm:text-xs font-medium text-slate-300 font-mono truncate">LAYANAN DRAF GURU & WALI</span>
           </div>
-          <div className="flex items-center gap-2 self-stretch sm:self-auto">
+          <div className="flex items-center gap-2 self-stretch sm:self-auto flex-wrap sm:flex-nowrap">
+            <ThemeToggleButton variant="pill" />
+            <MobilePWAHeaderButton variant="pill" />
+            <Link
+              to="/legalisir"
+              className="flex-1 sm:flex-initial px-3 py-2 sm:py-1.5 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/40 text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm"
+              title="Portal 2: Layanan Pengesahan & Legalisir Ijazah SMPN 3 Kras"
+            >
+              <Award className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+              <span>Portal 2: Legalisir</span>
+            </Link>
             <button
               type="button"
               onClick={generateFullUserManualPdf}
@@ -764,15 +787,12 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
               <FileDown className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
               <span>Panduan PDF</span>
             </button>
-            <button
-              type="button"
-              onClick={() => setIsAdminPinModalOpen(true)}
-              className="flex-1 sm:flex-initial px-3 py-2 sm:py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-indigo-500/20 hover:from-amber-500/30 hover:to-indigo-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm"
-              title="Masuk ke Portal 2: Dasbor Admin TU menggunakan PIN"
-            >
-              <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              <span>Admin TU (PIN)</span>
-            </button>
+            {/* Tanda Rahasia Admin TU: Status Siaga (Hanya Admin yang Tahu) */}
+            <SecretAdminMarker
+              variant="dot"
+              onTrigger={() => setIsAdminPinModalOpen(true)}
+              className="ml-1 shrink-0"
+            />
           </div>
         </div>
 
@@ -780,10 +800,24 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
           {/* Left panel: Info & Explanation */}
           <div className="lg:w-1/2 bg-gradient-to-br from-slate-900/90 to-slate-800/80 border border-slate-700/70 rounded-2xl p-5 sm:p-7 lg:p-8 flex flex-col justify-between shadow-2xl backdrop-blur-xl">
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs font-semibold mb-4 sm:mb-6">
-                <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                <span className="font-bold text-[11px] sm:text-xs">PORTAL 1: PERSURATAN MANDIRI</span>
-              </div>
+              {/* Official School Emblem Badge & Secret triple-click trigger */}
+              <SecretAdminMarker 
+                variant="logo-wrapper" 
+                onTrigger={() => setIsAdminPinModalOpen(true)}
+                className="inline-block"
+              >
+                <div className="flex items-center gap-3 mb-4 sm:mb-6 cursor-pointer group">
+                  <AppLogo size="lg" withGlow className="group-hover:scale-105 transition-transform" />
+                  <div>
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-[11px] font-semibold">
+                      <Sparkles className="w-3 h-3 text-indigo-400 shrink-0" />
+                      <span className="font-bold">PORTAL 1</span>
+                    </div>
+                    <div className="text-xs font-bold text-white mt-1">SMP NEGERI 3 KRAS</div>
+                    <div className="text-[10px] text-slate-400">Persuratan & Dokumen Mandiri</div>
+                  </div>
+                </div>
+              </SecretAdminMarker>
 
               <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight leading-tight mb-2 sm:mb-3">
                 Layanan Draf Surat <br/>
@@ -827,16 +861,13 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
               </div>
             </div>
 
-            <div className="pt-5 sm:pt-8 border-t border-slate-700/50 mt-5 sm:mt-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs text-slate-400">
+            <div className="pt-5 sm:pt-8 border-t border-slate-700/50 mt-5 sm:mt-6 flex items-center justify-between gap-2 text-xs text-slate-400">
               <span>SMP Negeri 3 Kras, Kediri</span>
-              <button 
-                type="button"
-                onClick={() => setIsAdminPinModalOpen(true)}
-                className="text-amber-400 hover:text-amber-300 font-semibold flex items-center gap-1.5 transition-colors"
-              >
-                <KeyRound className="w-3.5 h-3.5" />
-                <span>Masuk ke Portal 2 (Admin TU)</span>
-              </button>
+              {/* Discreet Secret Admin Trigger (Hanya Admin yang Tahu) */}
+              <SecretAdminMarker
+                variant="version"
+                onTrigger={() => setIsAdminPinModalOpen(true)}
+              />
             </div>
           </div>
 
@@ -994,6 +1025,9 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
             navigate('/admin');
           }}
         />
+
+        {/* Mobile PWA Floating Install Prompt */}
+        <MobilePWAFloatingPrompt bottomOffset="bottom-3" />
       </div>
     );
   }
@@ -1004,12 +1038,18 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
       {/* Header bar */}
       <header className="sticky top-0 z-30 bg-[#0F172A]/95 backdrop-blur-md border-b border-slate-800 px-3 sm:px-4 lg:px-8 py-2.5 sm:py-3.5">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <div className={cn(
-              "w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center font-bold text-white shadow-md shrink-0",
-              session.role === 'guru' ? "bg-indigo-600 shadow-indigo-600/30" : "bg-emerald-600 shadow-emerald-600/30"
-            )}>
-              {session.role === 'guru' ? <Briefcase className="w-4 h-4 sm:w-5 sm:h-5" /> : <GraduationCap className="w-4 h-4 sm:w-5 sm:h-5" />}
+          {/* Brand header with secret triple-tap/click marker for admin */}
+          <SecretAdminMarker
+            variant="logo-wrapper"
+            onTrigger={() => setIsAdminPinModalOpen(true)}
+            className="flex items-center gap-2 sm:gap-3 min-w-0"
+          >
+            <div className="relative shrink-0">
+              <AppLogo size="sm" withGlow className="w-8 h-8 sm:w-9 sm:h-9" />
+              <span className={cn(
+                "absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#0F172A]",
+                session.role === 'guru' ? "bg-indigo-500" : "bg-emerald-500"
+              )}></span>
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 sm:gap-2">
@@ -1023,9 +1063,12 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
               </div>
               <p className="text-[11px] text-slate-400 hidden sm:block truncate">SMP Negeri 3 Kras • Draf diverifikasi & diregister oleh Petugas Admin TU</p>
             </div>
-          </div>
+          </SecretAdminMarker>
 
           <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+            <ThemeToggleButton variant="compact" />
+            <MobilePWAHeaderButton variant="pill" />
+
             <div className="hidden md:block text-right">
               <div className="text-xs font-bold text-slate-200">{session.name}</div>
               <div className="text-[11px] font-mono text-slate-400 flex items-center gap-1 justify-end">
@@ -1033,6 +1076,15 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
                 <span>{session.phone}</span>
               </div>
             </div>
+
+            <Link
+              to="/legalisir"
+              className="p-2 sm:px-3 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/40 transition-all flex items-center gap-1.5 text-xs font-bold shadow-sm"
+              title="Buka Portal 2: Layanan Pengesahan & Legalisir Ijazah"
+            >
+              <Award className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="hidden sm:inline">Portal 2: Legalisir</span>
+            </Link>
 
             <button
               type="button"
@@ -1054,15 +1106,11 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
               <span className="hidden sm:inline">Poster & Canva</span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => setIsAdminPinModalOpen(true)}
-              className="p-2 sm:px-3 rounded-xl bg-gradient-to-r from-amber-500/20 to-indigo-500/20 hover:from-amber-500/30 hover:to-indigo-500/30 text-amber-300 border border-amber-500/40 transition-all flex items-center gap-1.5 text-xs font-bold shadow-sm"
-              title="Beralih ke Portal 2: Dasbor Admin TU menggunakan PIN"
-            >
-              <Lock className="w-3.5 h-3.5 text-amber-400" />
-              <span className="hidden sm:inline">Portal 2 (PIN)</span>
-            </button>
+            {/* Secret Admin Marker (Tanda Titik Siaga - Hanya Admin yang Tahu) */}
+            <SecretAdminMarker
+              variant="dot"
+              onTrigger={() => setIsAdminPinModalOpen(true)}
+            />
 
             <button
               onClick={handleLogout}
@@ -1077,7 +1125,7 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-3.5 sm:p-6 lg:p-8 space-y-4 sm:space-y-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-3.5 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 pb-28 md:pb-8">
         {/* Banner with Navigation Tabs */}
         <div className="bg-gradient-to-r from-slate-900 via-[#131C31] to-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 sm:gap-4">
           <div className="flex items-center gap-3 sm:gap-4">
@@ -2419,11 +2467,26 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
       </main>
 
       {/* Footer info */}
-      <footer className="mt-auto border-t border-slate-800/80 bg-[#0B1120] py-4 px-4 text-center text-xs text-slate-500">
+      <footer className="mt-auto border-t border-slate-800/80 bg-[#0B1120] py-4 px-4 text-center text-xs text-slate-500 pb-24 md:pb-4">
         <p>
           Layanan Tata Usaha Mandiri • SMP Negeri 3 Kras, Kab. Kediri &copy; {new Date().getFullYear()} • Hasil draf disimpan dan dikelola terpusat oleh Petugas Tata Usaha.
         </p>
       </footer>
+
+      {/* Futuristic Mobile Bottom Navigation */}
+      <PortalBottomNav
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        myLettersCount={myLetters.length}
+        nextAgendaNumber={outboxAgenda?.formattedNext || ''}
+        onOpenQuickAgenda={() => setIsQuickAgendaModalOpen(true)}
+        onOpenCanvaModal={() => setIsCanvaModalOpen(true)}
+        onOpenAdminPin={() => setIsAdminPinModalOpen(true)}
+        onDownloadPdfGuide={generateFullUserManualPdf}
+        userName={session.name}
+        userRole={session.role}
+        onLogout={handleLogout}
+      />
 
       {/* Quick Agenda Only Modal */}
       <QuickAgendaModal
@@ -2464,6 +2527,9 @@ Demikian surat rekomendasi ini dibuat untuk dapat dipergunakan sebagaimana mesti
           navigate('/admin');
         }}
       />
+
+      {/* Mobile PWA Floating Install Prompt */}
+      <MobilePWAFloatingPrompt bottomOffset="bottom-20" />
     </div>
   );
 }

@@ -63,19 +63,21 @@ import {
   DRIVE_DB_FOLDER_NAME
 } from '../lib/googleDriveDatabase';
 import AdminPinModal from '../components/AdminPinModal';
+import ChangeSchoolLogoModal from '../components/ChangeSchoolLogoModal';
 import { generateFullUserManualPdf } from '../lib/pdfGuideHelper';
 import { getAdminPin, setAdminPin, isPinRequired, setPinRequired } from '../lib/authHelper';
 import toast from 'react-hot-toast';
+import { applyTheme } from '../lib/themeHelper';
 
 const THEME_MODES = [
-  { id: 'high-density', name: 'High Density (Data Engine)', desc: 'Tema dasbor data padat berkecepatan tinggi, latar gelap pekat, kontras tinggi dan aksen indigo.' },
+  { id: 'light', name: 'Tampilan Putih (Clean Light)', desc: 'Mode terang resmi kedinasan/sekolah: latar putih bersih, kontras tinggi, sangat jelas dan mudah dibaca.' },
+  { id: 'high-density', name: 'High Density (Mode Gelap)', desc: 'Tema dasbor data padat berkecepatan tinggi, latar gelap pekat, kontras tinggi dan aksen indigo.' },
   { id: 'glass', name: 'Glassmorphism', desc: 'Bawaan elegan dengan efek kaca buram dan sudut membulat.' },
   { id: 'neumorphism', name: 'Neumorphism', desc: 'Desain 3D lembut seperti karet dengan bayangan terang-gelap.' },
   { id: 'claymorphism', name: 'Claymorphism', desc: 'Tampilan 3D halus, tebal, dan bersahabat seperti tanah liat.' },
   { id: 'aurora', name: 'Aurora Glow', desc: 'Latar gradien bercahaya yang bergerak dinamis.' },
   { id: 'grid', name: 'Cyber Grid', desc: 'Estetika cetak biru teknis dengan sudut tajam.' },
   { id: 'solid', name: 'Solid Minimalist', desc: 'Gelap pekat minim distraksi peningkat fokus.' },
-  { id: 'light', name: 'Clean Light', desc: 'Versi terang, sangat jelas dan profesional.' },
   { id: 'cyberpunk', name: 'Cyberpunk 2077', desc: 'Retro gelap, garis pindai & gaya hacker.' },
   { id: 'vaporwave', name: 'Vaporwave 80s', desc: 'Nostalgia warna senja retro pink 80an.' },
   { id: 'matrix', name: 'Matrix Terminal', desc: 'Layar kode murni dengan teks terminal.' },
@@ -240,6 +242,7 @@ export default function Settings() {
 
   // UI State
   const [isSaved, setIsSaved] = useState(false);
+  const [isLogoModalOpen, setIsLogoModalOpen] = useState(false);
   const [resolution, setResolution] = useState('1280x800');
   const [uiScale, setUiScale] = useState('1');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -312,9 +315,16 @@ export default function Settings() {
     window.addEventListener('driveDatabaseSynced', onDriveSynced);
     window.addEventListener('googleDriveConfigChanged', onDriveConfigChanged);
 
+    const onLogoUpdated = () => {
+      setLeftLogo(localStorage.getItem('leftLogo') || DEFAULT_LEFT_LOGO);
+      setRightLogo(localStorage.getItem('rightLogo') || DEFAULT_RIGHT_LOGO);
+    };
+    window.addEventListener('app-logo-updated', onLogoUpdated);
+
     return () => {
       window.removeEventListener('driveDatabaseSynced', onDriveSynced);
       window.removeEventListener('googleDriveConfigChanged', onDriveConfigChanged);
+      window.removeEventListener('app-logo-updated', onLogoUpdated);
     };
   }, []);
 
@@ -455,11 +465,7 @@ export default function Settings() {
   };
 
   const applyThemeClasses = (rgb: string, hex: string, style: string) => {
-    document.body.className = '';
-    if (style !== 'glass') document.body.classList.add(`theme-${style}`);
-    document.documentElement.style.setProperty('--accent-rgb', rgb);
-    document.documentElement.style.setProperty('--accent-glow', `rgba(${rgb}, 0.5)`);
-    document.documentElement.style.setProperty('--accent-text', hex);
+    applyTheme(style, rgb, hex);
   };
 
   const applyResolution = (res: string) => {
@@ -534,6 +540,8 @@ export default function Settings() {
       const result = event.target?.result as string;
       setLeftLogo(result);
       localStorage.setItem('leftLogo', result);
+      window.dispatchEvent(new CustomEvent('app-logo-updated', { detail: { leftLogo: result } }));
+      window.dispatchEvent(new Event('storage'));
       toast.success('Logo Sekolah (Kiri) berhasil diunggah');
     };
     reader.readAsDataURL(file);
@@ -551,7 +559,10 @@ export default function Settings() {
       const result = event.target?.result as string;
       setRightLogo(result);
       localStorage.setItem('rightLogo', result);
-      toast.success('Logo Dinas (Kanan) berhasil diunggah');
+      localStorage.setItem('appLogo', result);
+      window.dispatchEvent(new CustomEvent('app-logo-updated', { detail: { logo: result, rightLogo: result } }));
+      window.dispatchEvent(new Event('storage'));
+      toast.success('Logo Dinas/Sekolah (Kanan) berhasil diunggah');
     };
     reader.readAsDataURL(file);
   };
@@ -559,18 +570,25 @@ export default function Settings() {
   const handleResetLeftLogo = () => {
     setLeftLogo(DEFAULT_LEFT_LOGO);
     localStorage.setItem('leftLogo', DEFAULT_LEFT_LOGO);
+    window.dispatchEvent(new CustomEvent('app-logo-updated', { detail: { leftLogo: DEFAULT_LEFT_LOGO } }));
+    window.dispatchEvent(new Event('storage'));
     toast.success('Logo Sekolah dikembalikan ke Preset Tut Wuri Handayani');
   };
 
   const handleResetRightLogo = () => {
     setRightLogo(DEFAULT_RIGHT_LOGO);
     localStorage.setItem('rightLogo', DEFAULT_RIGHT_LOGO);
+    localStorage.setItem('appLogo', DEFAULT_RIGHT_LOGO);
+    window.dispatchEvent(new CustomEvent('app-logo-updated', { detail: { logo: DEFAULT_RIGHT_LOGO, rightLogo: DEFAULT_RIGHT_LOGO } }));
+    window.dispatchEvent(new Event('storage'));
     toast.success('Logo Dinas dikembalikan ke Preset Lambang Dinas Pendidikan');
   };
 
   const handleRemoveLeftLogo = () => {
     setLeftLogo('');
     localStorage.removeItem('leftLogo');
+    window.dispatchEvent(new CustomEvent('app-logo-updated', { detail: { leftLogo: '' } }));
+    window.dispatchEvent(new Event('storage'));
     toast('Logo Sekolah dinonaktifkan', { icon: '🗑️' });
   };
 
@@ -837,14 +855,41 @@ export default function Settings() {
                       </label>
                     </div>
 
+                    {/* Quick Access to Full Logo Catalog & Manager */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-gradient-to-r from-indigo-950/60 via-slate-900/70 to-amber-950/40 border border-amber-500/30 shadow-lg">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0">
+                          <Sparkles className="w-5 h-5 text-amber-400" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                            Katalog Desain Logo Resmi & Kustomisasi
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono font-bold border border-amber-500/30">
+                              REKOMENDASI
+                            </span>
+                          </h4>
+                          <p className="text-xs text-slate-400 mt-0.5">
+                            Pilih varian lambang resmi SMPN 3 Kras (Perisai Emas, Lingkaran Kedinasan, Lotus) atau unggah logo kustom (PNG Transparan).
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsLogoModalOpen(true)}
+                        className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-bold shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 transition-all shrink-0 hover:scale-[1.02] active:scale-[0.98]"
+                      >
+                        <ImageIcon className="w-4 h-4" /> Buka Pengaturan Logo
+                      </button>
+                    </div>
+
                     {/* Logo Upload Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {/* Logo Kiri: Sekolah */}
                       <div className="bg-slate-900/60 border border-white/10 rounded-xl p-4 flex flex-col justify-between space-y-3">
                         <div className="flex items-start gap-3">
-                          <div className="w-16 h-16 rounded-lg border border-white/10 bg-white/5 flex items-center justify-center p-1 overflow-hidden shrink-0">
+                          <div className="w-16 h-16 flex items-center justify-center shrink-0">
                             {leftLogo ? (
-                              <img src={leftLogo} alt="Logo Sekolah" className="w-full h-full object-contain" />
+                              <img src={leftLogo} alt="Logo Sekolah" className="w-full h-full object-contain filter drop-shadow-sm" />
                             ) : (
                               <span className="text-[10px] text-slate-500 text-center">Tanpa Logo</span>
                             )}
@@ -895,9 +940,9 @@ export default function Settings() {
                       {/* Logo Kanan: Dinas Pendidikan */}
                       <div className="bg-slate-900/60 border border-white/10 rounded-xl p-4 flex flex-col justify-between space-y-3">
                         <div className="flex items-start gap-3">
-                          <div className="w-16 h-16 rounded-lg border border-white/10 bg-white/5 flex items-center justify-center p-1 overflow-hidden shrink-0">
+                          <div className="w-16 h-16 flex items-center justify-center shrink-0">
                             {rightLogo ? (
-                              <img src={rightLogo} alt="Logo Dinas" className="w-full h-full object-contain" />
+                              <img src={rightLogo} alt="Logo Dinas" className="w-full h-full object-contain filter drop-shadow-sm" />
                             ) : (
                               <span className="text-[10px] text-slate-500 text-center">Tanpa Logo</span>
                             )}
@@ -1894,6 +1939,12 @@ export default function Settings() {
       <GoogleDriveDatabaseModal
         isOpen={isDriveDbModalOpen}
         onClose={() => setIsDriveDbModalOpen(false)}
+      />
+
+      {/* Modal Pengaturan & Kustomisasi Logo Sekolah */}
+      <ChangeSchoolLogoModal
+        isOpen={isLogoModalOpen}
+        onClose={() => setIsLogoModalOpen(false)}
       />
     </motion.div>
   );

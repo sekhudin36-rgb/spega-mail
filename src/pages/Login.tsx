@@ -16,17 +16,34 @@ import {
   Eye,
   EyeOff,
   ExternalLink,
-  Lock
+  Lock,
+  ArrowLeft,
+  Award
 } from 'lucide-react';
 import { useNavigate, Navigate, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { cn } from '../lib/utils';
 import { addSystemLog } from '../lib/db';
 import { loginAdminWithPin, getAdminPin } from '../lib/authHelper';
+import { MobilePWAFloatingPrompt } from '../components/MobilePWAInstall';
+import ThemeToggleButton from '../components/ThemeToggleButton';
+import SecretAdminMarker, { useSecretAdminShortcut } from '../components/SecretAdminTrigger';
+import AppLogo from '../components/AppLogo';
 
 export default function Login() {
   const [appName, setAppName] = useState('SPEGA MAIL');
-  const [activeTab, setActiveTab] = useState<'admin' | 'guru_wali'>('admin');
+  const [showAdminTab, setShowAdminTab] = useState(false);
+  const [activeTab, setActiveTab] = useState<'admin' | 'guru_wali'>('guru_wali');
+
+  const activateSecretAdmin = () => {
+    setShowAdminTab(true);
+    setActiveTab('admin');
+    setError('');
+    toast.success('Akses Khusus Petugas Admin TU Terbuka 🔒');
+  };
+
+  // Keyboard shortcut listener (Ctrl+Shift+A or Alt+A)
+  useSecretAdminShortcut(activateSecretAdmin);
   
   // Admin form
   const [adminLoginMode, setAdminLoginMode] = useState<'pin' | 'credentials'>('pin');
@@ -181,6 +198,39 @@ export default function Login() {
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMSIgY3k9IjEiIHI9IjEiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC4wNykiLz48L3N2Zz4=')] [mask-image:linear-gradient(to_bottom,transparent,black,transparent)]" />
       </div>
 
+      {/* Top Bar for Portal Link & Theme Switcher */}
+      <div className="relative z-10 w-full max-w-5xl mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Link 
+            to="/" 
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold shadow-sm transition-all"
+            title="Kembali ke Portal 1: Guru & Wali"
+          >
+            <ArrowLeft className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Portal 1: Guru & Wali</span>
+          </Link>
+
+          <Link 
+            to="/legalisir" 
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-950/50 hover:bg-indigo-900/60 text-indigo-200 border border-indigo-500/30 text-xs font-semibold shadow-sm transition-all"
+            title="Buka Portal 2: Layanan Legalisir Ijazah"
+          >
+            <Award className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Portal 2: Legalisir</span>
+          </Link>
+
+          {/* Secret Admin Marker (Hanya Admin yang Tahu) */}
+          <SecretAdminMarker
+            variant="dot"
+            onTrigger={activateSecretAdmin}
+          />
+        </div>
+
+        <div className="flex items-center gap-2 self-end sm:self-auto">
+          <ThemeToggleButton variant="pill" />
+        </div>
+      </div>
+
       <div className="relative z-10 w-full max-w-5xl flex flex-col lg:flex-row items-center gap-12 lg:gap-20">
         
         {/* Left Side: Branding & Info */}
@@ -190,9 +240,15 @@ export default function Login() {
           transition={{ duration: 0.8, ease: "easeOut" }}
           className="lg:w-1/2 flex-col items-center lg:items-start text-center lg:text-left hidden lg:flex"
         >
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded bg-slate-800 border border-slate-700 text-indigo-400 text-xs font-mono mb-6 shadow-sm">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
-            <span>DATA PERSURATAN TERINTEGRASI • SMPN 3 KRAS</span>
+          <div className="flex items-center gap-4 mb-6">
+            <AppLogo size="xl" withGlow className="w-16 h-16 sm:w-20 sm:h-20" />
+            <div>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-indigo-400 text-xs font-mono mb-1.5 shadow-sm">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
+                <span>DATA PERSURATAN TERINTEGRASI</span>
+              </div>
+              <div className="text-xs font-bold text-slate-300">SMP NEGERI 3 KRAS</div>
+            </div>
           </div>
           
           <h1 className="text-4xl lg:text-5xl font-bold text-white tracking-tight leading-[1.15] mb-4">
@@ -206,27 +262,49 @@ export default function Login() {
             Portal layanan terpadu: Pengajuan draf surat mandiri untuk Guru & Wali Murid, serta manajemen arsip naskah dinas resmi untuk Tata Usaha.
           </p>
           
-          <div className="flex flex-col gap-4 w-full max-w-md">
-            <div className="flex items-center gap-3 text-slate-300 p-3 rounded-xl bg-slate-900/60 border border-slate-800">
-              <div className="w-9 h-9 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
-                <Briefcase className="w-4 h-4" />
+            <div className="flex flex-col gap-3 w-full max-w-md">
+              <div className="flex items-center gap-3 text-slate-300 p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+                <div className="w-9 h-9 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">Portal 1: Guru & Wali Murid</h3>
+                  <p className="text-[11px] text-slate-400">Buat draf surat tugas, perizinan, keterangan siswa aktif, mutasi & langsung unduh PDF</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-xs font-bold text-white uppercase tracking-wider">Portal Guru & Wali Murid</h3>
-                <p className="text-[11px] text-slate-400">Buat draf surat tugas, perizinan, keterangan siswa aktif, mutasi & langsung unduh PDF</p>
-              </div>
-            </div>
 
-            <div className="flex items-center gap-3 text-slate-300 p-3 rounded-xl bg-slate-900/60 border border-slate-800">
-              <div className="w-9 h-9 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
-                <ShieldCheck className="w-4 h-4" />
+              <div className="flex items-center gap-3 text-slate-300 p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+                <div className="w-9 h-9 rounded-lg bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
+                  <Award className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">Portal 2: Layanan Legalisir</h3>
+                  <p className="text-[11px] text-slate-400">Pengesahan ijazah, SKL, raport, pelacakan berkas online, & verifikasi keabsahan</p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-xs font-bold text-white uppercase tracking-wider">Khusus Akun Admin Tata Usaha</h3>
-                <p className="text-[11px] text-slate-400">Penomoran register resmi, verifikasi draf masuk, disposisi, dan kearsipan</p>
-              </div>
+
+              {showAdminTab ? (
+                <div className="flex items-center gap-3 text-slate-300 p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+                  <div className="w-9 h-9 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                    <ShieldCheck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-white uppercase tracking-wider">Portal 3: Admin Tata Usaha</h3>
+                    <p className="text-[11px] text-slate-400">Penomoran register resmi, verifikasi draf masuk, disposisi, dan kearsipan</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 text-slate-300 p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+                  <div className="w-9 h-9 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                    <ShieldCheck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-white uppercase tracking-wider">Verifikasi Akurat</h3>
+                    <p className="text-[11px] text-slate-400">Draf terkirim otomatis ke sistem Tata Usaha sekolah untuk penerbitan nomor resmi</p>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
         </motion.div>
 
         {/* Right Side: Tabbed Login Form */}
@@ -241,48 +319,66 @@ export default function Login() {
             {/* Header */}
             <div className="mb-5 relative z-10">
               <div className="flex items-center justify-between gap-2 mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 bg-indigo-600 rounded-lg flex items-center justify-center font-bold text-white shadow-sm">
-                    <Mail className="w-4 h-4" />
-                  </div>
+                <div className="flex items-center gap-2.5">
+                  <AppLogo size="sm" withGlow className="w-8 h-8" />
                   <h2 className="text-lg font-bold text-white tracking-tight">{appName}</h2>
                 </div>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
-                  SMPN 3 KRAS
-                </span>
+                {/* Secret triple-click trigger on school title badge */}
+                <SecretAdminMarker
+                  variant="logo-wrapper"
+                  onTrigger={activateSecretAdmin}
+                >
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 border border-slate-700 cursor-pointer transition-colors" title="SMPN 3 Kras">
+                    SMPN 3 KRAS
+                  </span>
+                </SecretAdminMarker>
               </div>
             </div>
 
-            {/* Portal Tab Switcher */}
-            <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-900/90 border border-slate-700/80 rounded-xl mb-5">
-              <button
-                type="button"
-                onClick={() => { setActiveTab('guru_wali'); setError(''); }}
-                className={cn(
-                  "py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5",
-                  activeTab === 'guru_wali'
-                    ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-900/30"
-                    : "text-slate-400 hover:text-slate-200"
-                )}
-              >
-                <Users className="w-3.5 h-3.5" />
-                <span>Guru & Wali</span>
-              </button>
+            {/* Portal Tab Switcher (Conditionally reveals Portal 3 only for authorized Admin) */}
+            {showAdminTab ? (
+              <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-900/90 border border-slate-700/80 rounded-xl mb-5">
+                <button
+                  type="button"
+                  onClick={() => { setActiveTab('guru_wali'); setError(''); }}
+                  className={cn(
+                    "py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5",
+                    activeTab === 'guru_wali'
+                      ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-900/30"
+                      : "text-slate-400 hover:text-slate-200"
+                  )}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Portal 1: Guru/Wali</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => { setActiveTab('admin'); setError(''); }}
-                className={cn(
-                  "py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5",
-                  activeTab === 'admin'
-                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-900/30"
-                    : "text-slate-400 hover:text-slate-200"
-                )}
-              >
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Admin TU</span>
-              </button>
-            </div>
+                <button
+                  type="button"
+                  onClick={() => { setActiveTab('admin'); setError(''); }}
+                  className={cn(
+                    "py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5",
+                    activeTab === 'admin'
+                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-900/30"
+                      : "text-slate-400 hover:text-slate-200"
+                  )}
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>Portal 3: Admin TU</span>
+                </button>
+              </div>
+            ) : (
+              <div className="p-2.5 bg-slate-900/80 border border-slate-700/60 rounded-xl mb-5 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span className="text-xs font-bold text-white font-mono">PORTAL 1: GURU & WALI MURID</span>
+                </div>
+                {/* Secret dot trigger */}
+                <SecretAdminMarker
+                  variant="dot"
+                  onTrigger={activateSecretAdmin}
+                />
+              </div>
+            )}
 
             {/* TAB 1: GURU & WALI LOGIN FORM */}
             {activeTab === 'guru_wali' && (
@@ -564,22 +660,41 @@ export default function Login() {
               </div>
             )}
 
-            {/* Quick Access to Dedicated Letter Submission Portal */}
-            <div className="mt-5 pt-4 border-t border-slate-700/80">
+            {/* Quick Access to Portals */}
+            <div className="mt-5 pt-4 border-t border-slate-700/80 space-y-2">
               <Link 
                 to="/"
-                className="w-full p-2.5 rounded-xl bg-gradient-to-r from-emerald-950/40 via-slate-900 to-indigo-950/40 hover:from-emerald-950/60 hover:to-indigo-950/60 border border-emerald-500/30 hover:border-emerald-500/50 transition-all flex items-center justify-between text-xs text-slate-200 group"
+                className="w-full p-2.5 rounded-xl bg-gradient-to-r from-emerald-950/40 via-slate-900 to-emerald-950/20 hover:from-emerald-950/60 hover:to-emerald-900/40 border border-emerald-500/30 hover:border-emerald-500/50 transition-all flex items-center justify-between text-xs text-slate-200 group"
               >
                 <div className="flex items-center gap-2.5">
                   <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30 shrink-0">
                     <Sparkles className="w-3.5 h-3.5" />
                   </div>
                   <div className="text-left">
-                    <div className="font-bold text-emerald-300 group-hover:text-emerald-200">Portal 1: Layanan Draf Surat Mandiri</div>
-                    <div className="text-[10px] text-slate-400">Halaman Utama Guru & Wali Murid SMPN 3 Kras</div>
+                    <div className="font-bold text-emerald-300 group-hover:text-emerald-200">Portal 1: Guru & Wali Murid</div>
+                    <div className="text-[10px] text-slate-400">Layanan Draf & Pengajuan Persuratan Mandiri</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-1 text-emerald-400 text-xs font-semibold">
+                  <span>Buka</span>
+                  <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                </div>
+              </Link>
+
+              <Link 
+                to="/legalisir"
+                className="w-full p-2.5 rounded-xl bg-gradient-to-r from-indigo-950/40 via-slate-900 to-indigo-950/20 hover:from-indigo-950/60 hover:to-indigo-900/40 border border-indigo-500/30 hover:border-indigo-500/50 transition-all flex items-center justify-between text-xs text-slate-200 group"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30 shrink-0">
+                    <Award className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="text-left">
+                    <div className="font-bold text-indigo-300 group-hover:text-indigo-200">Portal 2: Layanan Legalisir</div>
+                    <div className="text-[10px] text-slate-400">Pengesahan Ijazah, Rapor, & Lacak Berkas Online</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 text-indigo-400 text-xs font-semibold">
                   <span>Buka</span>
                   <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
                 </div>
@@ -589,11 +704,18 @@ export default function Login() {
         </motion.div>
       </div>
       
-      <div className="absolute bottom-6 inset-x-0 text-center z-10 hidden lg:block">
+      <div className="absolute bottom-6 inset-x-0 text-center z-10 hidden lg:flex items-center justify-center gap-3">
         <p className="text-sm text-slate-500">
           {appName} &copy; {new Date().getFullYear()} • Layanan Tata Usaha & Persuratan SMPN 3 Kras
         </p>
+        <SecretAdminMarker
+          variant="version"
+          onTrigger={activateSecretAdmin}
+        />
       </div>
+
+      {/* Mobile PWA Floating Prompt */}
+      <MobilePWAFloatingPrompt bottomOffset="bottom-3" />
     </div>
   );
 }

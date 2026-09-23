@@ -262,7 +262,10 @@ export default function CanvaPosterModal({ isOpen, onClose }: CanvaPosterModalPr
         <body>
           <div class="poster-container">
             <div class="poster-header">
-              <span class="school-tag">${school.schoolName}</span>
+              <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 8px;">
+                <img src="${school.rightLogo || '/app-logo.png'}" alt="Logo Sekolah" style="width: 38px; height: 38px; object-fit: contain; filter: drop-shadow(0 2px 8px rgba(0,0,0,0.3));" />
+                <span class="school-tag" style="margin-bottom: 0;">${school.schoolName}</span>
+              </div>
               <h1 class="poster-title">PANDUAN PERSURATAN & AGENDA DIGITAL</h1>
               <p class="poster-subtitle">Alur Akses Mandiri, Pengajuan Surat, & Registrasi Nomor Agenda Keluar</p>
             </div>

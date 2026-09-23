@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { NavLink, Outlet, useNavigate, Link } from 'react-router-dom';
+import AppLogo from './AppLogo';
 import { 
   Mail, 
   Users, 
@@ -30,7 +31,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Palette,
-  FileDown
+  FileDown,
+  Award
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -38,8 +40,12 @@ import ToastProvider from './ToastProvider';
 import CommandPalette from './CommandPalette';
 import CanvaPosterModal from './CanvaPosterModal';
 import GoogleDriveDatabaseModal from './GoogleDriveDatabaseModal';
+import ChangeSchoolLogoModal from './ChangeSchoolLogoModal';
+import { MobilePWAFloatingPrompt, MobilePWAHeaderButton, MobilePWAInstallModal } from './MobilePWAInstall';
 import { getGoogleAccessToken, getGoogleUser } from '../lib/googleDrive';
 import { generateFullUserManualPdf } from '../lib/pdfGuideHelper';
+import ThemeToggleButton from './ThemeToggleButton';
+import AdminBottomNav from './AdminBottomNav';
 import toast from 'react-hot-toast';
 
 export default function Layout() {
@@ -56,6 +62,8 @@ export default function Layout() {
   const [isCanvaModalOpen, setIsCanvaModalOpen] = useState(false);
   const [isDriveDbModalOpen, setIsDriveDbModalOpen] = useState(false);
   const [isDriveConnected, setIsDriveConnected] = useState(false);
+  const [isMobilePwaModalOpen, setIsMobilePwaModalOpen] = useState(false);
+  const [isLogoModalOpen, setIsLogoModalOpen] = useState(false);
 
   const toggleSidebarCollapse = () => {
     setIsSidebarCollapsed(prev => {
@@ -176,8 +184,9 @@ export default function Layout() {
   };
 
   const navItems = [
-    { to: '/admin', icon: LayoutDashboard, label: 'Dashboard Admin', badge: 'PORTAL 2' },
+    { to: '/admin', icon: LayoutDashboard, label: 'Dashboard Admin (Portal 3)', badge: 'PORTAL 3' },
     { to: '/letters', icon: Mail, label: 'Register Surat', badge: 'AGENDA' },
+    { to: '/admin/legalisir', icon: Award, label: 'Layanan Legalisir (Portal 2)', badge: 'PORTAL 2' },
     { to: '/', icon: Sparkles, label: 'Portal 1: Guru & Wali', badge: 'PORTAL 1' },
     { to: '/archives', icon: Archive, label: 'Arsip Dokumen', badge: null },
     { to: '/teachers', icon: Users, label: 'Data Dewan Guru', badge: null },
@@ -223,19 +232,26 @@ export default function Layout() {
                 isSidebarCollapsed ? "justify-center" : "justify-between gap-2"
               )}>
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="relative shrink-0">
-                    <div className="w-9 h-9 bg-gradient-to-tr from-indigo-700 to-indigo-500 rounded-xl flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-900/50 border border-indigo-400/30">
-                      <Mail className="w-4 h-4 text-white" />
-                    </div>
-                    <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-[#0B0E14]"></span>
+                  <div 
+                    onClick={() => setIsLogoModalOpen(true)}
+                    title="Klik untuk Mengubah Logo Sekolah"
+                    className="relative shrink-0 cursor-pointer group hover:scale-105 transition-transform"
+                  >
+                    <AppLogo size="sm" withGlow className="w-9 h-9" />
                   </div>
                   {!isSidebarCollapsed && (
                     <div className="min-w-0">
                       <h1 className="font-bold text-sm tracking-tight text-white truncate flex items-center gap-1.5">
                         {appName}
-                        <span className="text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded border border-amber-500/30">PORTAL 2</span>
+                        <button
+                          onClick={() => setIsLogoModalOpen(true)}
+                          title="Ubah Logo Sekolah"
+                          className="text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 px-1.5 py-0.2 rounded border border-amber-500/30 transition-colors"
+                        >
+                          PORTAL 3
+                        </button>
                       </h1>
-                      <p className="text-[11px] text-slate-400 truncate">Dasbor Admin TU • SMPN 3 Kras</p>
+                      <p className="text-[11px] text-slate-400 truncate">Portal 3: Admin TU • SMPN 3 Kras</p>
                     </div>
                   )}
                 </div>
@@ -362,19 +378,23 @@ export default function Layout() {
                 </button>
               )}
 
-              {installPrompt && (
-                <button 
-                  onClick={handleInstallClick}
-                  className={cn(
-                    "w-full flex items-center justify-center gap-2 rounded-lg text-xs font-semibold bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white shadow-md transition-all",
-                    isSidebarCollapsed ? "p-2" : "px-3 py-2"
-                  )}
-                  title="Instal Aplikasi Desktop / Android PWA"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  {!isSidebarCollapsed && <span>Instal Offline</span>}
-                </button>
-              )}
+              <button 
+                onClick={() => {
+                  if (installPrompt) {
+                    handleInstallClick();
+                  } else {
+                    setIsMobilePwaModalOpen(true);
+                  }
+                }}
+                className={cn(
+                  "w-full flex items-center justify-center gap-2 rounded-lg text-xs font-semibold bg-gradient-to-r from-indigo-600 via-sky-600 to-indigo-500 hover:from-indigo-500 hover:to-sky-500 text-white shadow-md transition-all",
+                  isSidebarCollapsed ? "p-2" : "px-3 py-2"
+                )}
+                title="Pasang Aplikasi di Layar HP (PWA)"
+              >
+                <Download className="w-3.5 h-3.5" />
+                {!isSidebarCollapsed && <span>Instal Aplikasi HP</span>}
+              </button>
 
               <button 
                 onClick={() => {
@@ -444,6 +464,12 @@ export default function Layout() {
           
           {/* Header Right Actions */}
           <div className="flex items-center gap-2.5">
+            {/* Theme Toggle (Tampilan Putih / Gelap) */}
+            <ThemeToggleButton variant="compact" />
+
+            {/* Mobile PWA Install Button */}
+            <MobilePWAHeaderButton variant="pill" />
+
             {/* Mobile Search Button */}
             <button
               onClick={() => setIsCommandOpen(true)}
@@ -460,7 +486,19 @@ export default function Layout() {
               title="Buka Portal 1: Layanan Draf Surat Guru & Wali Murid"
             >
               <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-[11px] hidden md:inline">Portal 1: Guru & Wali</span>
+              <span className="text-[11px] hidden lg:inline">Portal 1: Guru & Wali</span>
+              <span className="text-[11px] lg:hidden">Portal 1</span>
+            </Link>
+
+            {/* Portal 2: Legalisir Quick Button */}
+            <Link
+              to="/admin/legalisir"
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-950/40 hover:bg-indigo-900/50 border border-indigo-500/30 text-indigo-300 hover:text-indigo-200 transition-colors text-xs font-semibold shadow-sm"
+              title="Buka Portal 2: Layanan Pengesahan & Legalisir Ijazah"
+            >
+              <Award className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="text-[11px] hidden lg:inline">Portal 2: Legalisir</span>
+              <span className="text-[11px] lg:hidden">Portal 2</span>
             </Link>
 
             {/* Panduan PDF Manual Button */}
@@ -585,73 +623,19 @@ export default function Layout() {
         </header>
 
         {/* Dynamic Page Content View */}
-        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 pb-20 md:pb-6 print:overflow-visible print:p-0 relative custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 pb-24 md:pb-6 print:overflow-visible print:p-0 relative custom-scrollbar">
           <Outlet />
         </div>
 
-        {/* Mobile Bottom Navigation Dock */}
-        <nav className="fixed bottom-0 left-0 right-0 z-30 bg-[#0B0E14]/95 backdrop-blur-xl border-t border-slate-800/90 px-3 py-1.5 flex items-center justify-around md:hidden shadow-[0_-4px_25px_rgba(0,0,0,0.6)] print:hidden">
-          <NavLink
-            to="/admin"
-            className={({ isActive }) =>
-              cn(
-                "flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all text-[10px] font-medium min-w-[54px]",
-                isActive ? "text-indigo-400 font-bold bg-indigo-500/10" : "text-slate-400 hover:text-slate-200"
-              )
-            }
-          >
-            <LayoutDashboard className="w-4 h-4 mb-0.5" />
-            <span>Dasbor</span>
-          </NavLink>
-
-          <NavLink
-            to="/letters"
-            className={({ isActive }) =>
-              cn(
-                "flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all text-[10px] font-medium min-w-[54px]",
-                isActive ? "text-indigo-400 font-bold bg-indigo-500/10" : "text-slate-400 hover:text-slate-200"
-              )
-            }
-          >
-            <Mail className="w-4 h-4 mb-0.5" />
-            <span>Surat</span>
-          </NavLink>
-
-          {/* Highlighted Portal 1 Quick Switch */}
-          <Link
-            to="/"
-            className="flex flex-col items-center justify-center -mt-4 py-1.5 px-3 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white shadow-lg shadow-emerald-950/70 border border-emerald-400/40 min-w-[62px] active:scale-95 transition-transform"
-            title="Buka Portal 1: Layanan Guru & Wali Murid"
-          >
-            <Sparkles className="w-4 h-4 mb-0.5 text-amber-200" />
-            <span className="text-[10px] font-bold">Portal 1</span>
-          </Link>
-
-          <NavLink
-            to="/archives"
-            className={({ isActive }) =>
-              cn(
-                "flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all text-[10px] font-medium min-w-[54px]",
-                isActive ? "text-indigo-400 font-bold bg-indigo-500/10" : "text-slate-400 hover:text-slate-200"
-              )
-            }
-          >
-            <Archive className="w-4 h-4 mb-0.5" />
-            <span>Arsip</span>
-          </NavLink>
-
-          <button
-            type="button"
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className={cn(
-              "flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all text-[10px] font-medium min-w-[54px]",
-              isSidebarOpen ? "text-indigo-400 font-bold bg-indigo-500/10" : "text-slate-400 hover:text-slate-200"
-            )}
-          >
-            <Menu className="w-4 h-4 mb-0.5" />
-            <span>Menu</span>
-          </button>
-        </nav>
+        {/* Futuristic Mobile Bottom Navigation Dock */}
+        <AdminBottomNav
+          onOpenCommandPalette={() => setIsCommandOpen(true)}
+          onOpenCanvaModal={() => setIsCanvaModalOpen(true)}
+          onOpenDriveDbModal={() => setIsDriveDbModalOpen(true)}
+          onDownloadPdfGuide={generateFullUserManualPdf}
+          isDriveConnected={isDriveConnected}
+          adminName={adminName}
+        />
 
         {/* High Density Footer */}
         <footer className="h-9 bg-[#0B0E14] border-t border-slate-800/80 px-6 flex items-center justify-between shrink-0 text-[10px] text-slate-400 font-mono print:hidden">
@@ -689,6 +673,21 @@ export default function Layout() {
       <GoogleDriveDatabaseModal
         isOpen={isDriveDbModalOpen}
         onClose={() => setIsDriveDbModalOpen(false)}
+      />
+
+      {/* Mobile Floating PWA Prompt (above bottom mobile nav) */}
+      <MobilePWAFloatingPrompt bottomOffset="bottom-20" />
+
+      {/* Mobile PWA Install Guide Modal */}
+      <MobilePWAInstallModal
+        isOpen={isMobilePwaModalOpen}
+        onClose={() => setIsMobilePwaModalOpen(false)}
+      />
+
+      {/* Ubah & Kustomisasi Logo Sekolah Modal */}
+      <ChangeSchoolLogoModal
+        isOpen={isLogoModalOpen}
+        onClose={() => setIsLogoModalOpen(false)}
       />
     </div>
   );

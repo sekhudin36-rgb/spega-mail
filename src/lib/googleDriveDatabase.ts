@@ -1,4 +1,4 @@
-import { db, type Letter, type Teacher, type Student, type Archive, type SystemLog } from './db';
+import { db, type Letter, type Teacher, type Student, type Archive, type SystemLog, type LegalisirRequest } from './db';
 import { 
   getGoogleAccessToken, 
   getRootFolderId, 
@@ -23,6 +23,7 @@ export interface DriveDatabaseMetadata {
     teachersCount: number;
     studentsCount: number;
     archivesCount: number;
+    legalisirCount?: number;
   };
 }
 
@@ -33,6 +34,7 @@ export interface DriveDatabasePayload {
   students: Student[];
   archives: Archive[];
   systemLogs?: SystemLog[];
+  legalisir?: LegalisirRequest[];
 }
 
 export interface DriveFileInfo {
@@ -52,6 +54,7 @@ export async function exportDatabasePayload(): Promise<DriveDatabasePayload> {
   const students = await db.students.toArray();
   const archives = await db.archives.toArray();
   const systemLogs = await db.systemLogs.limit(50).toArray();
+  const legalisir = await db.legalisir.toArray();
 
   const user = getGoogleUser();
 
@@ -68,13 +71,15 @@ export async function exportDatabasePayload(): Promise<DriveDatabasePayload> {
         teachersCount: teachers.length,
         studentsCount: students.length,
         archivesCount: archives.length,
+        legalisirCount: legalisir.length,
       }
     },
     letters,
     teachers,
     students,
     archives,
-    systemLogs
+    systemLogs,
+    legalisir
   };
 
   return payload;
@@ -88,22 +93,24 @@ export async function exportDatabasePayload(): Promise<DriveDatabasePayload> {
 export async function importDatabasePayload(
   payload: DriveDatabasePayload, 
   mode: 'replace' | 'merge' = 'merge'
-): Promise<{ letters: number; teachers: number; students: number; archives: number }> {
+): Promise<{ letters: number; teachers: number; students: number; archives: number; legalisir?: number }> {
   if (!payload || !payload.letters) {
     throw new Error('Format data database Google Drive tidak valid atau berkas kosong.');
   }
 
-  return await db.transaction('rw', [db.letters, db.teachers, db.students, db.archives, db.systemLogs], async () => {
+  return await db.transaction('rw', [db.letters, db.teachers, db.students, db.archives, db.systemLogs, db.legalisir], async () => {
     if (mode === 'replace') {
       await db.letters.clear();
       await db.teachers.clear();
       await db.students.clear();
       await db.archives.clear();
+      await db.legalisir.clear();
 
       if (payload.letters?.length) await db.letters.bulkAdd(payload.letters);
       if (payload.teachers?.length) await db.teachers.bulkAdd(payload.teachers);
       if (payload.students?.length) await db.students.bulkAdd(payload.students);
       if (payload.archives?.length) await db.archives.bulkAdd(payload.archives);
+      if (payload.legalisir?.length) await db.legalisir.bulkAdd(payload.legalisir);
     } else {
       // Merge mode: Add or update records
       // Letters
@@ -178,6 +185,25 @@ export async function importDatabasePayload(
           }
         }
       }
+
+      // Legalisir
+      if (payload.legalisir?.length) {
+        const existingLegalisir = await db.legalisir.toArray();
+        const existingTicketMap = new Map(existingLegalisir.map(l => [l.ticketNumber, l]));
+
+        for (const remoteLeg of payload.legalisir) {
+          if (remoteLeg.ticketNumber && existingTicketMap.has(remoteLeg.ticketNumber)) {
+            const localLeg = existingTicketMap.get(remoteLeg.ticketNumber)!;
+            await db.legalisir.update(localLeg.id as number, {
+              ...remoteLeg,
+              id: localLeg.id
+            });
+          } else {
+            const { id, ...legData } = remoteLeg;
+            await db.legalisir.add(legData as LegalisirRequest);
+          }
+        }
+      }
     }
 
     // Log the sync event
@@ -187,14 +213,15 @@ export async function importDatabasePayload(
       category: 'Sistem',
       level: 'success',
       user: getGoogleUser()?.email || 'Admin TU',
-      details: `Database berhasil diperbarui dari Google Drive (${payload.letters?.length || 0} surat, ${payload.teachers?.length || 0} guru, ${payload.students?.length || 0} siswa).`
+      details: `Database berhasil diperbarui dari Google Drive (${payload.letters?.length || 0} surat, ${payload.teachers?.length || 0} guru, ${payload.students?.length || 0} siswa, ${payload.legalisir?.length || 0} legalisir).`
     });
 
     return {
       letters: payload.letters?.length || 0,
       teachers: payload.teachers?.length || 0,
       students: payload.students?.length || 0,
-      archives: payload.archives?.length || 0
+      archives: payload.archives?.length || 0,
+      legalisir: payload.legalisir?.length || 0
     };
   });
 }

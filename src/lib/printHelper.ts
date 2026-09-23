@@ -2,7 +2,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
-import type { Letter, Archive, Teacher } from './db';
+import type { Letter, Archive, Teacher, LegalisirRequest } from './db';
 import QRCode from 'qrcode';
 
 /**
@@ -70,7 +70,7 @@ export const DEFAULT_LEFT_LOGO = `data:image/svg+xml;utf8,${encodeURIComponent(`
 </svg>
 `)}`;
 
-export const DEFAULT_RIGHT_LOGO = '';
+export const DEFAULT_RIGHT_LOGO = '/app-logo.png';
 
 export interface SchoolConfig {
   schoolName: string;
@@ -93,7 +93,7 @@ export function getSchoolConfig(): SchoolConfig {
 
   // Retrieve logos with fallback to official default preset (Lambang Kabupaten Kediri)
   const leftLogo = localStorage.getItem('leftLogo') || localStorage.getItem('schoolLogoLeft') || localStorage.getItem('schoolLogo') || DEFAULT_LEFT_LOGO;
-  const rightLogo = localStorage.getItem('rightLogo') || localStorage.getItem('schoolLogoRight') || '';
+  const rightLogo = localStorage.getItem('rightLogo') || localStorage.getItem('schoolLogoRight') || localStorage.getItem('appLogo') || DEFAULT_RIGHT_LOGO;
   const showKopLogos = localStorage.getItem('showKopLogos') !== 'false';
 
   return {
@@ -160,6 +160,7 @@ export function getHeadmasterDetails(teachersList?: Teacher[] | any[], cfg?: Sch
  */
 export function renderOfficialKopHTML(config: SchoolConfig, isLandscape = true): string {
   const leftLogo = config.leftLogo || DEFAULT_LEFT_LOGO;
+  const rightLogo = config.rightLogo || DEFAULT_RIGHT_LOGO;
   const logoH = isLandscape ? '68px' : '64px';
   const logoW = isLandscape ? '65px' : '60px';
 
@@ -187,7 +188,9 @@ export function renderOfficialKopHTML(config: SchoolConfig, isLandscape = true):
               </div>
             </div>
           </td>
-          <td style="width: 10px; border: none !important; padding: 0;"></td>
+          <td style="width: 75px; text-align: center; vertical-align: middle; border: none !important; padding: 0 0 0 8px;">
+            ${rightLogo ? `<img src="${rightLogo}" alt="Logo SMP Negeri 3 Kras" style="max-height: ${logoH}; max-width: ${logoW}; height: auto; width: auto; object-fit: contain; display: block; margin: 0 auto;" />` : ''}
+          </td>
         </tr>
       </table>
     </div>
@@ -3062,6 +3065,423 @@ export function generateAgendaSlipHTML(letter: Letter, applicantNip?: string): s
           </td>
         </tr>
       </table>
+    </div>
+  `;
+}
+
+/**
+ * Render official Bukti Tanda Terima Permohonan Legalisir
+ */
+export function renderLegalisirReceiptHTML(
+  req: LegalisirRequest, 
+  config: SchoolConfig, 
+  qrDataUrl?: string
+): string {
+  const submitDate = req.submittedAt ? format(new Date(req.submittedAt), 'dd MMMM yyyy, HH:mm', { locale: id }) : '-';
+  const kopHTML = renderOfficialKopHTML(config, false);
+
+  const docTypeNames: Record<string, string> = {
+    ijazah: 'Ijazah SMP',
+    skl: 'Surat Keterangan Lulus (SKL)',
+    rapor: 'Buku Rapor Siswa',
+    piagam: 'Piagam / Sertifikat Prestasi',
+    skpi: 'Surat Keterangan Pengganti Ijazah (SKPI)',
+    lainnya: 'Dokumen Sekolah Lainnya'
+  };
+
+  const deliveryNames: Record<string, string> = {
+    ambil_langsung: 'Ambil Sendiri di Loket Tata Usaha',
+    diwakilkan: `Diwakilkan kepada ${req.representativeName || 'Penerima Kuasa'} (${req.representativePhone || '-'})`,
+    pos_ekspedisi: 'Pengiriman Kurir / Pos Kilat'
+  };
+
+  return `
+    <div style="font-family: Arial, Helvetica, sans-serif; color: #111; line-height: 1.4; padding: 10px 18px; max-width: 800px; margin: 0 auto; background: #fff;">
+      ${kopHTML}
+
+      <div style="text-align: center; margin-bottom: 16px;">
+        <h3 style="margin: 0; font-size: 13pt; text-transform: uppercase; font-family: 'Times New Roman', serif; text-decoration: underline; letter-spacing: 0.5px;">
+          BUKTI TANDA TERIMA PENGAJUAN LEGALISIR
+        </h3>
+        <p style="margin: 3px 0 0 0; font-size: 9.5pt; color: #475569;">
+          Nomor Registrasi Tiket: <b style="color: #0f172a; font-family: monospace; font-size: 11pt;">${req.ticketNumber}</b>
+        </p>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; border: 1.5px dashed #0284c7; background-color: #f0f9ff; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px;">
+        <div>
+          <div style="font-size: 9pt; color: #0369a1; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px;">Status Berkas Saat Ini</div>
+          <div style="font-size: 12pt; font-weight: bold; color: #0c4a6e; margin-top: 2px;">
+            ${req.status === 'ready' ? '✓ SIAP DIAMBIL DI LOKET TU' : req.status === 'completed' ? '✓ SELESAI DISERAHKAN' : req.status === 'verified' || req.status === 'signed' ? 'SEDANG DIPROSES TU' : 'DALAM ANTREAN VERIFIKASI'}
+          </div>
+          <div style="font-size: 8.5pt; color: #0284c7; margin-top: 2px;">
+            Waktu Pengajuan: ${submitDate} WIB
+          </div>
+        </div>
+        ${qrDataUrl ? `
+          <div style="text-align: center; padding-left: 12px;">
+            <img src="${qrDataUrl}" alt="QR Verifikasi" style="width: 72px; height: 72px; display: block;" />
+            <span style="font-size: 7.5pt; color: #64748b; font-family: monospace;">${req.qrVerificationCode}</span>
+          </div>
+        ` : ''}
+      </div>
+
+      <table style="width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-bottom: 16px;">
+        <tbody>
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="width: 28%; padding: 6px 4px; font-weight: bold; color: #334155;">Nama Pemohon (Alumni/Siswa)</td>
+            <td style="width: 2%;">:</td>
+            <td style="padding: 6px 4px; font-weight: bold; color: #0f172a;">${req.applicantName}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 6px 4px; color: #334155;">NISN / NIS</td>
+            <td>:</td>
+            <td style="padding: 6px 4px;">${req.nisn || '-'} / ${req.nis || '-'}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 6px 4px; color: #334155;">Tahun Kelulusan</td>
+            <td>:</td>
+            <td style="padding: 6px 4px; font-weight: bold;">Tahun ${req.graduationYear || '-'}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 6px 4px; color: #334155;">Tempat, Tgl Lahir / Orang Tua</td>
+            <td>:</td>
+            <td style="padding: 6px 4px;">${req.birthPlaceDate || '-'} • Ortu: ${req.parentName || '-'}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 6px 4px; color: #334155;">Dokumen yang Dilegalisir</td>
+            <td>:</td>
+            <td style="padding: 6px 4px; font-weight: bold; color: #1e293b;">
+              ${docTypeNames[req.documentType] || req.documentName}
+            </td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 6px 4px; color: #334155;">Nomor Seri Ijazah / Dokumen</td>
+            <td>:</td>
+            <td style="padding: 6px 4px; font-family: monospace; font-weight: bold;">${req.documentNumber || '-'}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 6px 4px; color: #334155;">Jumlah Eksemplar Disahkan</td>
+            <td>:</td>
+            <td style="padding: 6px 4px; font-weight: bold; color: #0369a1;">
+              ${req.numberOfCopies} (Lembar / Rangkap)
+            </td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 6px 4px; color: #334155;">Keperluan / Tujuan Berkas</td>
+            <td>:</td>
+            <td style="padding: 6px 4px;">${req.purpose} ${req.destinationInstitution ? `(${req.destinationInstitution})` : ''}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 6px 4px; color: #334155;">Metode Pengambilan</td>
+            <td>:</td>
+            <td style="padding: 6px 4px;">${deliveryNames[req.deliveryMethod] || req.deliveryMethod}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 6px 4px; color: #334155;">Kontak Pemohon (WhatsApp)</td>
+            <td>:</td>
+            <td style="padding: 6px 4px;">${req.phone || '-'}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div style="background-color: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px 14px; font-size: 8.5pt; color: #334155; margin-bottom: 20px; line-height: 1.45;">
+        <b style="color: #0f172a;">Ketentuan & Syarat Pengambilan di Loket Tata Usaha SMPN 3 Kras:</b>
+        <ol style="margin: 4px 0 0 0; padding-left: 18px;">
+          <li>Membawa <b>Ijazah / Dokumen ASLI</b> saat mengambil berkas untuk verifikasi akhir.</li>
+          <li>Menyerahkan fotokopi dokumen sebanyak yang dimohonkan (${req.numberOfCopies} lembar) yang telah difotokopi rapi berukuran A4/F4.</li>
+          <li>Layanan Legalisir SMP Negeri 3 Kras <b>100% GRATIS (Tidak Dipungut Biaya Apapun)</b>.</li>
+          <li>Jam Pelayanan Loket TU: Senin - Kamis (07.30 - 14.30 WIB), Jumat (07.30 - 11.30 WIB), Sabtu (07.30 - 13.00 WIB).</li>
+        </ol>
+      </div>
+
+      <table style="width: 100%; margin-top: 10px; font-size: 9.5pt;">
+        <tr>
+          <td style="width: 50%; text-align: center; vertical-align: top;">
+            <div>Pemohon / Yang Mengajukan,</div>
+            <div style="height: 50px;"></div>
+            <div style="font-weight: bold; text-decoration: underline;">${req.applicantName}</div>
+            <div style="font-size: 8.5pt; color: #64748b;">${req.applicantType.toUpperCase()}</div>
+          </td>
+          <td style="width: 50%; text-align: center; vertical-align: top;">
+            <div>Kediri, ${format(new Date(), 'dd MMMM yyyy', { locale: id })}</div>
+            <div>Petugas Loket Tata Usaha,</div>
+            <div style="height: 50px;"></div>
+            <div style="font-weight: bold; text-decoration: underline;">${config.adminName || 'Sekhudin, S.Pd.'}</div>
+            <div style="font-size: 8.5pt; color: #64748b;">NIP. ${config.adminNip || '197505122008011012'}</div>
+          </td>
+        </tr>
+      </table>
+    </div>
+  `;
+}
+
+/**
+ * Render official Surat Keterangan / Pengesahan Legalisir Ijazah Resmi (Format Dinas)
+ */
+export function renderLegalisirEndorsementCertificateHTML(
+  req: LegalisirRequest,
+  config: SchoolConfig,
+  qrDataUrl?: string,
+  teachersList?: Teacher[]
+): string {
+  const kopHTML = renderOfficialKopHTML(config, false);
+  const headmaster = getHeadmasterDetails(teachersList, config);
+  const todayStr = format(new Date(), 'dd MMMM yyyy', { locale: id });
+  const regNumber = req.ticketNumber.replace('LEG-', '421.7/');
+
+  return `
+    <div style="font-family: 'Times New Roman', Times, serif; color: #000; line-height: 1.45; padding: 12px 24px; max-width: 820px; margin: 0 auto; background: #fff;">
+      ${kopHTML}
+
+      <div style="text-align: center; margin-bottom: 18px;">
+        <h3 style="margin: 0; font-size: 13pt; text-transform: uppercase; text-decoration: underline; letter-spacing: 0.8px; font-weight: bold;">
+          SURAT KETERANGAN PENGESAHAN DOKUMEN / LEGALISIR
+        </h3>
+        <p style="margin: 2px 0 0 0; font-size: 10.5pt;">
+          Nomor: ${regNumber}/418.20/${new Date().getFullYear()}
+        </p>
+      </div>
+
+      <p style="font-size: 11pt; text-align: justify; margin-bottom: 12px; text-indent: 32px;">
+        Yang bertanda tangan di bawah ini, Kepala SMP Negeri 3 Kras, Kecamatan Kras, Kabupaten Kediri, Provinsi Jawa Timur, dengan ini menerangkan dengan sebenarnya bahwa:
+      </p>
+
+      <table style="width: 100%; border-collapse: collapse; font-size: 11pt; margin-bottom: 14px; margin-left: 20px;">
+        <tbody>
+          <tr>
+            <td style="width: 32%; padding: 3px 0;">Nama Lengkap</td>
+            <td style="width: 3%;">:</td>
+            <td style="padding: 3px 0; font-weight: bold;">${req.applicantName}</td>
+          </tr>
+          <tr>
+            <td style="padding: 3px 0;">Nomor Induk Siswa Nasional (NISN)</td>
+            <td>:</td>
+            <td style="padding: 3px 0;">${req.nisn || '-'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 3px 0;">Nomor Induk Siswa (NIS)</td>
+            <td>:</td>
+            <td style="padding: 3px 0;">${req.nis || '-'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 3px 0;">Tempat, Tanggal Lahir</td>
+            <td>:</td>
+            <td style="padding: 3px 0;">${req.birthPlaceDate || '-'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 3px 0;">Nama Orang Tua / Wali</td>
+            <td>:</td>
+            <td style="padding: 3px 0;">${req.parentName || '-'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 3px 0;">Tahun Kelulusan</td>
+            <td>:</td>
+            <td style="padding: 3px 0; font-weight: bold;">Tahun Pelajaran ${req.graduationYear ? `${parseInt(req.graduationYear)-1}/${req.graduationYear}` : '-'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 3px 0;">Jenis Dokumen</td>
+            <td>:</td>
+            <td style="padding: 3px 0; font-weight: bold;">${req.documentName || 'Ijazah SMP Negeri 3 Kras'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 3px 0;">Nomor Seri Dokumen</td>
+            <td>:</td>
+            <td style="padding: 3px 0; font-family: monospace; font-weight: bold;">${req.documentNumber || '-'}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p style="font-size: 11pt; text-align: justify; margin-bottom: 12px; text-indent: 32px;">
+        Dokumen fotokopi tersebut di atas telah diteliti, diperiksa, dan <b>DICCOKKAN DENGAN DOKUMEN ASLI SERTA BUKU INDUK SISWA</b> yang tersimpan pada arsip resmi SMP Negeri 3 Kras, dan dinyatakan <b>BENAR, SAH, SERTA SESUAI DENGAN ASLINYA</b>.
+      </p>
+
+      <p style="font-size: 11pt; text-align: justify; margin-bottom: 24px; text-indent: 32px;">
+        Surat keterangan pengesahan ini dibuat dengan sebenarnya atas permohonan yang bersangkutan untuk dipergunakan sebagai <b>${req.purpose || 'Persyaratan Administrasi Resmi'}</b>${req.destinationInstitution ? ` di ${req.destinationInstitution}` : ''}.
+      </p>
+
+      <table style="width: 100%; font-size: 11pt; margin-top: 20px;">
+        <tr>
+          <td style="width: 45%; vertical-align: top; text-align: center;">
+            ${qrDataUrl ? `
+              <div style="border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; display: inline-block; background: #fafafa;">
+                <img src="${qrDataUrl}" alt="QR Verifikasi" style="width: 80px; height: 80px; display: block; margin: 0 auto;" />
+                <div style="font-size: 8pt; font-family: monospace; margin-top: 4px; color: #475569;">${req.qrVerificationCode}</div>
+                <div style="font-size: 7.5pt; color: #0284c7; margin-top: 1px;">Validasi Digital TU SMPN 3 Kras</div>
+              </div>
+            ` : ''}
+          </td>
+          <td style="width: 10%;"></td>
+          <td style="width: 45%; vertical-align: top; text-align: center;">
+            <div>Kediri, ${todayStr}</div>
+            <div style="font-weight: bold; margin-top: 2px;">${headmaster.title || 'Kepala SMP Negeri 3 Kras,'}</div>
+            <div style="height: 60px;"></div>
+            <div style="font-weight: bold; text-decoration: underline; font-size: 11.5pt;">${headmaster.name}</div>
+            <div style="font-size: 9.5pt;">${headmaster.rank}</div>
+            <div style="font-size: 10pt;">NIP. ${headmaster.nip}</div>
+          </td>
+        </tr>
+      </table>
+    </div>
+  `;
+}
+
+/**
+ * Render official Buku Register Rekapitulasi Legalisir Tata Usaha
+ */
+export function renderLegalisirRegisterBookHTML(
+  items: LegalisirRequest[],
+  config: SchoolConfig,
+  yearFilter = 'Semua Periode',
+  teachersList?: Teacher[]
+): string {
+  const kopHTML = renderOfficialKopHTML(config, true);
+  const headmaster = getHeadmasterDetails(teachersList, config);
+  const todayStr = format(new Date(), 'dd MMMM yyyy', { locale: id });
+
+  const docShort: Record<string, string> = {
+    ijazah: 'Ijazah',
+    skl: 'SKL',
+    rapor: 'Rapor',
+    piagam: 'Piagam',
+    skpi: 'SKPI',
+    lainnya: 'Lainnya'
+  };
+
+  return `
+    <div style="font-family: Arial, Helvetica, sans-serif; color: #111; line-height: 1.35; padding: 10px 14px; width: 100%; background: #fff;">
+      ${kopHTML}
+
+      <div style="text-align: center; margin-bottom: 14px;">
+        <h3 style="margin: 0; font-size: 13pt; text-transform: uppercase; font-family: 'Times New Roman', serif; text-decoration: underline; letter-spacing: 0.8px;">
+          BUKU REGISTER PENGESAHAN DOKUMEN & LEGALISIR SEKOLAH
+        </h3>
+        <p style="margin: 3px 0 0 0; font-size: 9.5pt; color: #334155;">
+          Periode: ${yearFilter} • Sub Bagian Tata Usaha SMP Negeri 3 Kras Kediri
+        </p>
+      </div>
+
+      <table style="width: 100%; border-collapse: collapse; font-size: 8.5pt; margin-bottom: 20px;">
+        <thead>
+          <tr style="background-color: #f1f5f9; border-top: 1.5px solid #000; border-bottom: 1.5px solid #000;">
+            <th style="border: 1px solid #94a3b8; padding: 6px 3px; text-align: center; width: 25px;">NO</th>
+            <th style="border: 1px solid #94a3b8; padding: 6px 4px; text-align: center; width: 75px;">TANGGAL</th>
+            <th style="border: 1px solid #94a3b8; padding: 6px 4px; text-align: center; width: 105px;">NO. TIKET / REGISTER</th>
+            <th style="border: 1px solid #94a3b8; padding: 6px 6px; text-align: left;">NAMA PEMOHON</th>
+            <th style="border: 1px solid #94a3b8; padding: 6px 4px; text-align: center; width: 75px;">NISN</th>
+            <th style="border: 1px solid #94a3b8; padding: 6px 4px; text-align: center; width: 45px;">TH LULUS</th>
+            <th style="border: 1px solid #94a3b8; padding: 6px 5px; text-align: left;">JENIS DOKUMEN & NO. SERI</th>
+            <th style="border: 1px solid #94a3b8; padding: 6px 3px; text-align: center; width: 35px;">JML</th>
+            <th style="border: 1px solid #94a3b8; padding: 6px 6px; text-align: left;">KEPERLUAN / TUJUAN</th>
+            <th style="border: 1px solid #94a3b8; padding: 6px 4px; text-align: center; width: 70px;">STATUS</th>
+            <th style="border: 1px solid #94a3b8; padding: 6px 4px; text-align: center; width: 90px;">TANDA TANGAN / PENGAMBIL</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map((it, idx) => {
+            const dateFmt = it.submittedAt ? format(new Date(it.submittedAt), 'dd/MM/yyyy') : '-';
+            return `
+              <tr style="border-bottom: 1px solid #cbd5e1; ${idx % 2 === 1 ? 'background-color: #f8fafc;' : ''}">
+                <td style="border: 1px solid #cbd5e1; padding: 5px 3px; text-align: center;">${idx + 1}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 5px 4px; text-align: center;">${dateFmt}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 5px 4px; text-align: center; font-family: monospace; font-weight: bold;">${it.ticketNumber}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 5px 6px; font-weight: bold;">${it.applicantName}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 5px 4px; text-align: center; font-family: monospace;">${it.nisn || '-'}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 5px 4px; text-align: center;">${it.graduationYear || '-'}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 5px 5px;">
+                  <div><b>${docShort[it.documentType] || it.documentType}</b></div>
+                  <div style="font-size: 7.5pt; color: #475569; font-family: monospace;">${it.documentNumber || '-'}</div>
+                </td>
+                <td style="border: 1px solid #cbd5e1; padding: 5px 3px; text-align: center; font-weight: bold;">${it.numberOfCopies}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 5px 6px;">
+                  <div>${it.purpose}</div>
+                  ${it.destinationInstitution ? `<div style="font-size: 7.5pt; color: #475569;">(${it.destinationInstitution})</div>` : ''}
+                </td>
+                <td style="border: 1px solid #cbd5e1; padding: 5px 4px; text-align: center;">
+                  <span style="font-size: 7.5pt; font-weight: bold; color: ${it.status === 'completed' ? '#047857' : it.status === 'ready' ? '#0284c7' : '#d97706'};">
+                    ${it.status === 'completed' ? 'SELESAI' : it.status === 'ready' ? 'SIAP AMBIL' : it.status.toUpperCase()}
+                  </span>
+                </td>
+                <td style="border: 1px solid #cbd5e1; padding: 5px 4px; text-align: center; font-size: 7.5pt;">
+                  ${it.takenBy ? `<div>${it.takenBy}</div><div style="color: #64748b;">${it.takenDate || ''}</div>` : `<div style="color: #94a3b8;">(....................)</div>`}
+                </td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+
+      ${renderOfficialSignaturesHTML(config, todayStr, 'Mengetahui Kepala Sekolah', 'Petugas Tata Usaha', teachersList)}
+    </div>
+  `;
+}
+
+/**
+ * Render official Stempel / Label Bukti Legalisir (Barcode / QR Keabsahan untuk fotokopi)
+ */
+export function renderLegalisirStampLabelsHTML(
+  req: LegalisirRequest,
+  config: SchoolConfig,
+  qrDataUrl?: string
+): string {
+  const count = Math.min(Math.max(req.numberOfCopies || 1, 1), 10);
+  const todayStr = format(new Date(), 'dd MMMM yyyy', { locale: id });
+
+  const labelBox = `
+    <div style="width: 48%; display: inline-block; vertical-align: top; box-sizing: border-box; margin: 1%; border: 2px solid #000; border-radius: 4px; padding: 8px 10px; font-family: Arial, Helvetica, sans-serif; font-size: 8pt; line-height: 1.25; background: #fff;">
+      <div style="text-align: center; font-weight: bold; border-bottom: 1.5px solid #000; padding-bottom: 3px; margin-bottom: 4px; font-family: 'Times New Roman', serif;">
+        <div style="font-size: 8.5pt;">PEMERINTAH KABUPATEN KEDIRI</div>
+        <div style="font-size: 9pt;">SMP NEGERI 3 KRAS</div>
+      </div>
+      <div style="text-align: center; font-size: 7.5pt; font-weight: bold; margin-bottom: 4px; color: #1e293b;">
+        TELAH DICCCOKKAN DENGAN ASLINYA<br/>DAN SESUAI BUKU INDUK SISWA
+      </div>
+      <table style="width: 100%; font-size: 7.5pt; border-collapse: collapse; margin-bottom: 4px;">
+        <tr>
+          <td style="width: 40%;">Nomor Register</td>
+          <td style="width: 5%;">:</td>
+          <td style="font-family: monospace; font-weight: bold;">${req.ticketNumber}</td>
+        </tr>
+        <tr>
+          <td>Nama Alumni</td>
+          <td>:</td>
+          <td style="font-weight: bold;">${req.applicantName}</td>
+        </tr>
+        <tr>
+          <td>Nomor Ijazah</td>
+          <td>:</td>
+          <td style="font-family: monospace;">${req.documentNumber || '-'}</td>
+        </tr>
+      </table>
+      <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 4px;">
+        ${qrDataUrl ? `
+          <div style="text-align: center;">
+            <img src="${qrDataUrl}" alt="QR" style="width: 42px; height: 42px; display: block;" />
+            <div style="font-size: 6pt; font-family: monospace;">${req.qrVerificationCode.slice(0, 14)}</div>
+          </div>
+        ` : '<div></div>'}
+        <div style="text-align: center; width: 60%; font-size: 7.5pt;">
+          <div>Kediri, ${todayStr}</div>
+          <div style="font-weight: bold; font-size: 7.5pt;">Kepala Sekolah,</div>
+          <div style="height: 26px;"></div>
+          <div style="font-weight: bold; text-decoration: underline; font-size: 8pt;">${config.headmaster || 'FARIDA, S.Pd.'}</div>
+          <div style="font-size: 7pt;">NIP. ${config.headmasterNip || '19720325 199703 2 002'}</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const labelsArray = Array.from({ length: count }).map(() => labelBox).join('');
+
+  return `
+    <div style="padding: 10px; max-width: 800px; margin: 0 auto; background: #fff;">
+      <div style="text-align: center; border-bottom: 1px dashed #64748b; padding-bottom: 8px; margin-bottom: 12px; font-family: Arial, sans-serif;">
+        <h4 style="margin: 0; font-size: 11pt;">LABEL STEMPEL PENGESAHAN / LEGALISIR IJAZAH RESMI</h4>
+        <p style="margin: 2px 0 0 0; font-size: 8pt; color: #475569;">Gunting dan tempelkan pada lembar fotokopi yang telah disetujui (${count} Eksemplar) • SMP Negeri 3 Kras</p>
+      </div>
+      <div style="display: flex; flex-wrap: wrap;">
+        ${labelsArray}
+      </div>
     </div>
   `;
 }

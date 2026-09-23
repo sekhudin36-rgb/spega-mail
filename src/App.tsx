@@ -11,7 +11,9 @@ import Settings from './pages/Settings';
 import SystemLogs from './pages/SystemLogs';
 import Login from './pages/Login';
 import PortalGuruWali from './pages/PortalGuruWali';
+import Legalisir from './pages/Legalisir';
 import ConfirmProvider from './components/ConfirmProvider';
+import { applyTheme, getCurrentTheme, THEME_EVENT } from './lib/themeHelper';
 
 // Admin only route guard
 function AdminProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -33,21 +35,27 @@ function AdminProtectedRoute({ children }: { children: React.ReactNode }) {
 export default function App() {
   useEffect(() => {
     // Apply saved theme on load (default to High Density)
-    const themeColorRgb = localStorage.getItem('themeColorRgb') || '99, 102, 241';
-    const themeColorHex = localStorage.getItem('themeColorHex') || '#818cf8';
-    const themeStyle = localStorage.getItem('themeStyle') || 'high-density';
-    const resolution = localStorage.getItem('appResolution');
+    const savedTheme = localStorage.getItem('themeStyle');
+    // If it was forced to 'light' in the previous session causing white screen issue, reset to high-density
+    const initialTheme = (!savedTheme || savedTheme === 'light') ? 'high-density' : savedTheme;
+    if (savedTheme === 'light') {
+      localStorage.setItem('themeStyle', 'high-density');
+    }
+    applyTheme(initialTheme);
+
     const scale = localStorage.getItem('uiScale') || '1';
-    
     document.documentElement.style.fontSize = `${16 * Number(scale)}px`;
-    document.body.className = '';
-    document.body.classList.add(`theme-${themeStyle}`);
-    
-    document.documentElement.style.setProperty('--accent-rgb', themeColorRgb);
-    document.documentElement.style.setProperty('--accent-glow', `rgba(${themeColorRgb}, 0.5)`);
-    document.documentElement.style.setProperty('--accent-text', themeColorHex);
+
+    const handleThemeChange = (e: any) => {
+      const activeTheme = e?.detail?.theme || getCurrentTheme();
+      document.body.className = '';
+      document.body.classList.add(`theme-${activeTheme}`);
+    };
+
+    window.addEventListener(THEME_EVENT, handleThemeChange);
 
     // Apply resolution
+    const resolution = localStorage.getItem('appResolution');
     if (resolution) {
       const isElectron = navigator.userAgent.toLowerCase().includes('electron') || (typeof window !== 'undefined' && 'require' in window);
       if (isElectron) {
@@ -65,6 +73,10 @@ export default function App() {
         }
       }
     }
+
+    return () => {
+      window.removeEventListener(THEME_EVENT, handleThemeChange);
+    };
   }, []);
 
   return (
@@ -77,6 +89,11 @@ export default function App() {
           <Route path="/portal-guru-wali" element={<PortalGuruWali />} />
           <Route path="/ajukan-surat" element={<PortalGuruWali />} />
 
+          {/* LAYANAN LEGALISIR PUBLIK (Siswa, Alumni, Wali Murid) */}
+          <Route path="/legalisir" element={<div className="min-h-screen p-4 md:p-8"><Legalisir isAdmin={false} /></div>} />
+          <Route path="/legalisir-sekolah" element={<div className="min-h-screen p-4 md:p-8"><Legalisir isAdmin={false} /></div>} />
+          <Route path="/lacak-legalisir" element={<div className="min-h-screen p-4 md:p-8"><Legalisir isAdmin={false} /></div>} />
+
           {/* Autentikasi / Login */}
           <Route path="/login" element={<Login />} />
 
@@ -85,6 +102,7 @@ export default function App() {
             <Route index element={<Dashboard />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="letters" element={<Letters />} />
+            <Route path="legalisir" element={<Legalisir isAdmin={true} />} />
             <Route path="archives" element={<Archives />} />
             <Route path="teachers" element={<Teachers />} />
             <Route path="students" element={<Students />} />
@@ -96,6 +114,7 @@ export default function App() {
           {/* Direct module routes with layout protection */}
           <Route element={<AdminProtectedRoute><Layout /></AdminProtectedRoute>}>
             <Route path="/letters" element={<Letters />} />
+            <Route path="/legalisir-admin" element={<Legalisir isAdmin={true} />} />
             <Route path="/archives" element={<Archives />} />
             <Route path="/teachers" element={<Teachers />} />
             <Route path="/students" element={<Students />} />
